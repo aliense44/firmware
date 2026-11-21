@@ -367,7 +367,7 @@ bool rf_protocol_decode_capture(
     return rf_protocol_load(rawFile(durations, frequency, preset).c_str(), out);
 }
 
-bool rf_protocol_encode(const RfCodes &code, int repeat, std::vector<int> &out) {
+bool rf_protocol_encode(RfCodes &code, int repeat, std::vector<int> &out) {
     out.clear();
     if (repeat < 1 || repeat > 20) return false;
     if (!code.decodedFile.isEmpty()) {
