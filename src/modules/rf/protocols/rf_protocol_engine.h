@@ -13,7 +13,7 @@ bool rf_protocol_decode_capture(
 );
 bool rf_protocol_load(const char *subfile, RfCodes &out);
 String rf_protocol_serialize(const RfCodes &code);
-bool rf_protocol_encode(RfCodes &code, int repeat, std::vector<int> &durations);
+bool rf_protocol_encode(const RfCodes &code, int repeat, std::vector<int> &durations);
 bool rf_protocol_has_encoder(const String &name);
 
 // Hardware boundary, shared with subghz.protoTransmit. Only explicit callers

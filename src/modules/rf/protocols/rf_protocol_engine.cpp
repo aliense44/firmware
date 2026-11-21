@@ -367,7 +367,7 @@ bool rf_protocol_decode_capture(
     return rf_protocol_load(rawFile(durations, frequency, preset).c_str(), out);
 }
 
-bool rf_protocol_encode(RfCodes &code, int repeat, std::vector<int> &out) {
+bool rf_protocol_encode(const RfCodes &code, int repeat, std::vector<int> &out) {
     out.clear();
     if (repeat < 1 || repeat > 20) return false;
     if (!code.decodedFile.isEmpty()) {
@@ -380,13 +380,6 @@ bool rf_protocol_encode(RfCodes &code, int repeat, std::vector<int> &out) {
     }
     std::vector<int> frame;
     if (code.protocol == "KeeLoq") {
-        // Regenerate the KeeLoq hop for the current counter and identified
-        // manufacturer before encoding. This lets ProtoPirate emulation transmit
-        // a fresh rolling-code frame instead of replaying the captured key.
-        // Unknown manufacturers keep the previous replay behavior.
-        if (!code.mf_name.isEmpty() && code.mf_name != "Unknown" && code.serial != 0) {
-            code.keeloq_step(0);
-        }
         if (!rf_keeloq_durations(code.key, frame)) return false;
     } else {
         const auto *def = rf_find_protocol(code.protocol);
@@ -441,6 +434,14 @@ String rf_protocol_encode_json(const char *input) {
     uint64_t repeat = 3;
     if (fields.count("Repeat") && (!unsignedValue(fields["Repeat"], repeat, 20) || !repeat))
         return failure("Invalid repeat count");
+    // Regenerate the KeeLoq hop for the current counter and identified
+    // manufacturer before encoding. This lets ProtoPirate emulation transmit
+    // a fresh rolling-code frame instead of replaying the captured key.
+    // Unknown manufacturers keep the previous replay behavior.
+    if (code.protocol == "KeeLoq" && !code.mf_name.isEmpty() && code.mf_name != "Unknown" &&
+        code.serial != 0) {
+        code.keeloq_step(0);
+    }
     std::vector<int> pulses;
     if (!rf_protocol_encode(code, (int)repeat, pulses))
         return failure("No compatible encoder or invalid payload");
