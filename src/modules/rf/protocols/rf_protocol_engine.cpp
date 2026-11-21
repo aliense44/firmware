@@ -380,6 +380,13 @@ bool rf_protocol_encode(const RfCodes &code, int repeat, std::vector<int> &out) 
     }
     std::vector<int> frame;
     if (code.protocol == "KeeLoq") {
+        // Regenerate the KeeLoq hop for the current counter and identified
+        // manufacturer before encoding. This lets ProtoPirate emulation transmit
+        // a fresh rolling-code frame instead of replaying the captured key.
+        // Unknown manufacturers keep the previous replay behavior.
+        if (!code.mf_name.isEmpty() && code.mf_name != "Unknown" && code.serial != 0) {
+            code.keeloq_step(0);
+        }
         if (!rf_keeloq_durations(code.key, frame)) return false;
     } else {
         const auto *def = rf_find_protocol(code.protocol);
@@ -441,6 +448,20 @@ String rf_protocol_encode_json(const char *input) {
     doc["ok"] = true;
     doc["pulses"] = pulses.size();
     doc["raw"] = std::string(rawFile(pulses, code.frequency, code.preset).c_str());
-    doc["updated"] = input; // Preserve all extra fields; encoding never advances counters implicitly.
+    String updated = input;
+    if (code.protocol == "KeeLoq") {
+        // Reflect the counter actually encoded into the regenerated KeeLoq hop.
+        std::istringstream lines(updated.c_str());
+        std::string line;
+        String result;
+        while (std::getline(lines, line)) {
+            if (line.rfind("Counter:", 0) == 0)
+                result += String("Counter: ") + String(code.cnt) + "\n";
+            else
+                result += String(line.c_str()) + "\n";
+        }
+        updated = result;
+    }
+    doc["updated"] = updated.c_str();
     return doc.overflowed() ? failure("Not enough memory") : jsonString(doc);
 }
