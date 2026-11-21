@@ -31,21 +31,14 @@ public:
         SCAN_OPTIONS,
         RESET,
         RANGE,
-        THRESHOLD,
         CLOSE_MENU,
         MAIN_MENU,
         NO_ACTION,
     };
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Constructor
-    /////////////////////////////////////////////////////////////////////////////////////
     RFScan();
     ~RFScan();
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Life Cycle
-    /////////////////////////////////////////////////////////////////////////////////////
     void setup();
     void loop();
 
@@ -65,30 +58,21 @@ private:
     char hexString[64];
     float frequency = 0.f;
     uint8_t _try = 0;
-    FreqFound _freqs[_MAX_TRIES]; // get the best RSSI out of 5 tries
+    FreqFound _freqs[_MAX_TRIES];
     int idx = range_limits[bruceConfigPins.rfScanRange][0];
     float found_freq = 0.f;
     int rssi = -80;
     int rssiThreshold = -65;
 
-    // Capture list shown on the scan screen: every signal kept in memory until
-    // the user deletes it or leaves the feature.
     std::vector<RfCapture> captures;
     int selected = 0;
-    int scrollOffset = 0;
     bool listDirty = true;
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // State management
-    /////////////////////////////////////////////////////////////////////////////////////
     bool handle_list_input();
     void open_signal_menu(int index);
     void open_scan_options();
     void set_option(RFMenuOption option, int index);
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Operations
-    /////////////////////////////////////////////////////////////////////////////////////
     bool decode_signal(const std::vector<int> &durations);
     bool read_raw(const std::vector<int> &durations);
     bool is_m5_duplicate_capture(const RfCodes &data);
@@ -100,11 +84,7 @@ private:
     void show_signal_info(int index);
     void reset_signals();
     void set_threshold();
-    // void set_range(); // Using similar function from rf_utils.h
 
-    /////////////////////////////////////////////////////////////////////////////////////
-    // Utils
-    /////////////////////////////////////////////////////////////////////////////////////
     void enable_receive();
     void init_freqs();
     bool fast_scan();
@@ -122,8 +102,7 @@ void display_signal_data(RfCodes received, bool headless = false);
 bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool autoSave = false);
 
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
-// Keeps native ProtoPirate reception armed while the previous capture is decoded.
-// Other callers retain the one-shot lifecycle by omitting this optional session.
+
 class RfReceiveSession {
 public:
     ~RfReceiveSession() { stop(); }
@@ -144,7 +123,6 @@ String rfReceiveSignal(
     const String &rxPreset = "", bool interruptOnNavigation = false, RfReceiveSession *session = nullptr
 );
 
-// Shared native capture-list presentation and navigation reset.
 void rf_clear_nav_state();
 struct RfCaptureListState {
     bool valid = false;
@@ -159,5 +137,7 @@ void rf_draw_capture_list(
     const std::vector<String> &labels, int selected, int &scrollOffset, size_t capacity,
     RfCaptureListState *previous = nullptr
 );
+
+bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received);
 
 #endif
