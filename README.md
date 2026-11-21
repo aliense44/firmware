@@ -1,320 +1,195 @@
-![Bruce Main Menu](./media/pictures/bruce_banner.jpg)
+# aliense44 Bruce Firmware Fork
 
-# :shark: Bruce
+This is a personal fork of [Bruce](https://github.com/pr3y/Bruce), focused on RF experimentation, ProtoPirate improvements, and practical Sub-GHz workflow enhancements.
 
-Bruce is a versatile ESP32 firmware packed with offensive-security tools, built to make Red Team operations fast and portable.
+The upstream Bruce project remains the primary source of the firmware core, device support, and general features. This fork is used to develop, test, and document selected improvements before proposing them upstream.
 
-It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) , [RockBase IoT](https://www.rockbaseiot.com) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
+## Focus
 
-## :zap: Get Our Official DevKit!
+This fork focuses on:
 
-# RF REAPER
+- ProtoPirate RF decoding and emulation
+- Sub-GHz protocol workflows
+- KeeLoq rolling-code handling
+- Practical RF file management
+- Improvements that can later be proposed to the upstream Bruce project
 
-**RF REAPER** is our custom PCB devkit, purpose-built for Bruce!
+## ProtoPirate Remote
 
-Every major feature works natively, right out of the box. Sub-GHz, NFC/RFID, IR, 2.4GHz(NRF), GPS-ready, and a microSD, all driven by a beefy ESP32-S3 (16MB Flash / 8MB PSRAM). Tons of GPIOs via the AW9523 expander plus Flipper Zero & iButton header compatibility mean you can hack, mod, and build on it endlessly. Want a specific function? Ask us with an issue, we'll check it.
+One of the additions in this fork is **ProtoPirate Remote**, a quick workflow for managing decoded KeeLoq remotes.
 
-👉 **[Buy the RF REAPER and official boards](https://shop.bruce.computer)**
+It allows selecting a previously decoded `.sub` file from:
 
-**Check our fully open-source hardware too:** https://bruce.computer/boards
-
-More custom devkit boards coming soon! Stay across our communities!
-
-## :building_construction: How to install
-
-### The easiest way to install Bruce is using our official Web Flasher!
-
-### Check out: https://bruce.computer/flasher
-
-Alternatively, you can download the latest binary from releases or actions and flash locally using esptool.py
-
-```sh
-esptool.py --port /dev/ttyACM0 write_flash 0x00000 Bruce-<device>.bin
+```text
+BruceRF/ProtoPirate
 ```
 
-**For m5stack devices**
+and transmitting regenerated KeeLoq rolling-code frames without repeatedly going through `Sub Decode` and `Emulate / encode`.
 
-If you already use M5Launcher to manage your m5stack device, you can install it with OTA
+### KeeLoq Remote features
 
-Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/download), just search for 'Bruce' (My official builds will be uploaded by "owner" and have photos.) on the device category you want to and click on burn
+- Select a decoded KeeLoq `.sub` file
+- Show the current counter, button code, and counter step
+- Transmit the next regenerated KeeLoq frame
+- Preview the updated counter, `Key`, and `Hop`
+- Select a counter step: 1, 2, 3, 5, or 10
+- Skip counter values without transmitting
+- Change the KeeLoq button/command code
+- Reset the counter to the value stored in the original `.sub` file
 
-## :keyboard: Discord Server
+### Persistent state
 
-Contact us in our [Discord Server](https://discord.gg/WJ9XF9czVT)!
+The original `.sub` file is never modified.
 
-## :bookmark_tabs: Wiki
+For each source file, ProtoPirate creates separate files:
 
-For more information on each function supported by Bruce, [read our wiki here](https://wiki.bruce.computer/).
-Also, [read our FAQ](https://wiki.bruce.computer/faq/)
+```text
+BruceRF/ProtoPirate/<name>.sub
+BruceRF/ProtoPirate/<name>.state
+BruceRF/ProtoPirate/<name>.log
+```
 
-## :computer: List of Features
+- `.sub` — original decoded capture
+- `.state` — current counter, step, and button code
+- `.log` — history of transmitted counters
 
-<details>
-  <summary><h2>WiFi</h2></summary>
+After restarting the device, the next transmission continues from the counter stored in the `.state` file.
 
-- [x] Connect to WiFi
-- [x] WiFi AP
-- [x] Disconnect WiFi
-- [x] [WiFi Atks](https://wiki.bruce.computer/features/wifi/#wifi-atks)
-  - [x] [Beacon Spam](https://wiki.bruce.computer/features/wifi/#beacon-spam)
-  - [x] [Target Atk](https://wiki.bruce.computer/features/wifi/#target-atks)
-    - [x] Information
-    - [x] Target Deauth
-    - [x] EvilPortal + Deauth
-  - [x] Deauth Flood (More than one target)
-- [x] [Wardriving](https://wiki.bruce.computer/features/gps/#wardriving)
-- [x] [TelNet](https://wiki.bruce.computer/features/wifi/#telnet)
-- [x] [SSH](https://wiki.bruce.computer/features/wifi/#ssh)
-- [x] [RAW Sniffer](https://wiki.bruce.computer/features/wifi/#raw-sniffer)
-- [x] [TCP Client](https://wiki.bruce.computer/features/wifi/#client-tcp)
-- [x] [TCP Listener](https://wiki.bruce.computer/features/wifi/#listen-tcp)
-- [x] [Evil Portal](https://wiki.bruce.computer/features/wifi/#evil-portal)
-- [x] [Scan Hosts](https://wiki.bruce.computer/features/wifi/#scan-hosts) (with TCP Port scanning)
-- [x] [Responder](https://wiki.bruce.computer/features/wifi/#responder)
-- [x] [Arp Spoofing](https://wiki.bruce.computer/features/wifi/#arp-spoofing)
-- [x] [Arp Poisoning](https://wiki.bruce.computer/features/wifi/#arp-poisoning)
-- [x] [Wireguard Tunneling](https://wiki.bruce.computer/features/wifi/#wireguard-tunneling)
-- [x] Brucegotchi
-  - [x] Pwnagotchi friend
-  - [x] Pwngrid spam faces & names
-    - [x] [Optional] DoScreen a very long name and face
-    - [x] [Optional] Flood uniq peer identifiers
+## KeeLoq scope
 
-</details>
+KeeLoq rolling-code regeneration is supported only when:
 
-<details>
-  <summary><h2>BLE</h2></summary>
+- The decoded protocol is `KeeLoq`
+- The manufacturer is recognized
+- A serial number is available
 
-- [x] [BLE Scan](https://wiki.bruce.computer/features/ble/#ble-scan)
-- [x] Bad BLE - Run Ducky scripts, similar to [BadUsb](https://wiki.bruce.computer/features/ble/#badble)
-- [x] BLE Keyboard - Cardputer and T-Deck Only
-- [x] iOS Spam
-- [x] Windows Spam
-- [x] Samsung Spam
-- [x] Android Spam
-- [x] Spam All
-</details>
+Unknown KeeLoq manufacturers remain in replay mode, because reliable rolling-code regeneration cannot be guaranteed.
 
-<details>
-  <summary><h2>RF</h2></summary>
+Other RF protocols continue using their existing decode, encode, and emulation paths.
 
-- [x] Scan/Copy
-- [x] [Custom SubGhz](https://wiki.bruce.computer/features/rf/#replay-payloads-like-flipper)
-- [x] Spectrum
-- [x] Jammer Full (sends a full squared wave into output)
-- [x] Jammer Intermittent (sends PWM signal into output)
-- [x] Config
-  - [x] RF TX Pin
-  - [x] RF RX Pin
-  - [x] RF Module
-    - [x] RF433 T/R M5Stack
-    - [x] [CC1101 (Sub-Ghz)](https://wiki.bruce.computer/features/rf/#cc1101)
-  - [x] RF Frequency
-- [x] Replay
-</details>
+## Tested example
 
-<details>
-  <summary><h2>RFID</h2></summary>
+The KeeLoq Remote workflow was tested with a DTM_Neo remote.
 
-- [x] Read tag
-- [x] Read 125kHz
-- [x] Clone tag
-- [x] Write NDEF records
-- [x] Amiibolink
-- [x] Chameleon
-- [x] Write data
-- [x] Erase data
-- [x] Save file
-- [x] Load file
-- [x] Config
-  - [x] [RFID Module](https://wiki.bruce.computer/features/rfid/#supported-modules)
-    - [x] PN532
-    - [x] PN532Killer
-- [ ] Emulate tag
-</details>
+Three frames generated by ProtoPirate matched the next three frames produced by the physical remote:
 
-<details>
-  <summary><h2>IR</h2></summary>
+- Counter values matched
+- Generated `Key` values matched
+- Generated `Hop` values matched
+- Serial, button code, and fixed portion remained consistent
 
-- [x] TV-B-Gone
-- [x] IR Receiver
-- [x] [Custom IR (NEC, NECext, SIRC, SIRC15, SIRC20, Samsung32, RC5, RC5X, RC6)](https://wiki.bruce.computer/features/ir/#replay-payloads-like-flipper)
-- [x] Config - [X] Ir TX Pin - [X] Ir RX Pin
-</details>
+## Upstream project
 
-<details>
-  <summary><h2>FM</h2></summary>
+This fork is based on Bruce:
 
-- [x] [Broadcast standard](https://wiki.bruce.computer/features/fm/#broadcast-standard)
-- [x] [Broadcast reserved](https://wiki.bruce.computer/features/fm/#broadcast-standard)
-- [x] [Broadcast stop](https://wiki.bruce.computer/features/fm/#broadcast-stop)
-- [ ] [FM Spectrum](https://wiki.bruce.computer/features/fm/#fm-spectrum)
-- [ ] [Hijack Traffic Announcements](https://wiki.bruce.computer/features/fm/#hijack-ta)
-- [ ] [Config](https://wiki.bruce.computer/features/fm/#bookmark_tabs-config)
-</details>
+https://github.com/pr3y/Bruce
 
-<details>
-  <summary><h2>NRF24</h2></summary>
+For general Bruce documentation, supported hardware, installation instructions, and the full feature list, see the upstream project:
 
-- [x] [NRF24 Jammer](https://wiki.bruce.computer/features/nrf24/)
-- [x] 2.4G Spectrum
-- [ ] Mousejack
-</details>
+https://github.com/pr3y/Bruce  
+https://wiki.bruce.computer/
 
-<details>
-  <summary><h2>Scripts</h2></summary>
+## Disclaimer
 
-- [x] [JavaScript Interpreter](https://wiki.bruce.computer/features/js-interpreter/) [Credits to justinknight93](https://github.com/justinknight93/Doolittle)
-</details>
+This fork is intended for legal and authorized security research, education, and testing only. Do not use it to interfere with systems you do not own or do not have explicit permission to test.
 
-<details>
-  <summary><h2>Others</h2></summary>
+The upstream Bruce project is distributed under the Affero General Public License (AGPL). This fork follows the same licensing requirements.
 
-- [x] Mic Spectrum
-- [x] [QRCodes](https://wiki.bruce.computer/features/others/#qrcodes)
-  - [x] Custom
-  - [x] PIX (Brazil bank transfer system)
-- [x] [SD Card Mngr](https://github.com/pr3y/Bruce/wiki/Others#sd-card-mngr)
-  - [x] View image (jpg)
-  - [x] File Info
-  - [x] [Wigle Upload](https://wiki.bruce.computer/features/gps/#how-to-use-wigle)
-  - [x] Play Audio
-  - [x] View File
-- [x] LittleFS Mngr
-- [x] [WebUI](https://wiki.bruce.computer/controlling-device/webui/)
-  - [x] Server Structure
-  - [x] Html
-  - [x] SDCard Mngr
-  - [x] Spiffs Mngr
-- [x] Megalodon
-- [x] [BADUsb (New features, LittleFS and SDCard)](https://wiki.bruce.computer/features/others/#badusb)
-- [x] USB Keyboard - Cardputer and T-Deck Only
-- [x] [iButton](https://wiki.bruce.computer/features/others/#ibutton)
-- [x] LED Control
-</details>
+---
 
-<details>
-  <summary><h2>Wire Tools</h2></summary>
+# aliense44 — Fork firmware Bruce
 
-- [x] UART Terminal
-  - [x] Baudrate presets + custom (300..5000000)
-  - [x] Custom RX/TX pins (Config > UART Pins)
-  - [x] Live send/receive terminal
-- [x] I2C Bus
-  - [x] Device scan (0x08-0x77)
-  - [x] Register read/write
-  - [x] 256-byte register dump
-- [x] SPI Bus
-  - [x] JEDEC flash detect
-  - [x] CS-framed HEX console (arbitrary transfers)
-- [x] JTAG Scanner
-  - [x] IDCODE read (TAP reset + DR shift, bit-banged TCK/TMS/TDI/TDO)
-- [x] Multimeter
-  - [x] Continuity: pin <-> pin (A driven LOW, B pulled up) with beeper
-  - [x] Continuity: pin -> GND (internal pull-up) with beeper
-  - [x] Held-pin detection (probe driven by another device, e.g. ADV Grove on CH9329)
-- [x] Serial control: `wire uart|i2c|spi|jtag|cont ...` commands over the serial CLI
-</details>
+To osobisty fork projektu [Bruce](https://github.com/pr3y/Bruce), skoncentrowany na eksperymentach RF, ulepszeniach ProtoPirate oraz praktycznych usprawnieniach pracy z Sub-GHz.
 
-<details>
-  <summary><h2>Clock</h2></summary>
+Nadrzędny projekt Bruce pozostaje głównym źródłem rdzenia firmware, obsługi urządzeń i ogólnych funkcji. Ten fork służy do tworzenia, testowania i dokumentowania wybranych ulepszeń przed ewentualnym zaproponowaniem ich upstreamowi.
 
-- [x] RTC Support
-- [x] NTP time adjust
-- [x] Manual adjust
-</details>
+## Cel forka
 
-<details>
-  <summary><h2>Connect (ESPNOW)</h2></summary>
+Ten fork koncentruje się na:
 
-- [x] Send File
-- [x] Receive File
-- [x] Send Commands
-- [x] Receive Commands
-</details>
+- dekodowaniu i emulacji RF w ProtoPirate
+- workflow dla protokołów Sub-GHz
+- obsłudze rolling code KeeLoq
+- praktycznym zarządzaniu plikami RF
+- ulepszeniach, które później mogą zostać zaproponowane upstreamowi Bruce
 
-<details>
-  <summary><h2>Config</h2></summary>
+## ProtoPirate Remote
 
-- [x] Brightness
-- [x] Dim Time
-- [x] Orientation
-- [x] UI Color
-- [x] Boot Sound on/off
-- [x] Clock
-- [x] Sleep
-- [x] Restart
-</details>
+Jednym z dodatków w tym forku jest **ProtoPirate Remote** — szybki workflow do obsługi zdekodowanych pilotów KeeLoq.
 
-## Specific functions per Device, the ones not mentioned here are available to all.
+Pozwala wybrać wcześniej zdekodowany plik `.sub` z folderu:
 
-| Device                                                                                                                                                                                      | CC1101 | NRF24 | FM Radio |        PN532         | Mic  | BadUSB | RGB Led | Speaker | Fuel Gauge | LITE_VERSION |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----: | :---: | :------: | :------------------: | :--: | :----: | :-----: | :-----: | :--------: | :----------: |
-| [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardputer-kit-w-m5stamps) (and ADV)                                                                                           |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: |  :ok:  |  :ok:   | NS4168  |    :x:     |     :x:      |
-| [M5Stack M5StickC PLUS2](https://shop.m5stack.com/products/m5stickc-plus2-esp32-mini-iot-development-kit)                                                                                   |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |  Tone   |    :x:     |     :x:      |
-| [M5Stack M5StickC PLUS](https://shop.m5stack.com/products/m5stickc-plus-esp32-pico-mini-iot-development-kit)                                                                                |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |  Tone   |    :x:     |     :x:²     |
-| [M5Stack M5Core BASIC](https://shop.m5stack.com/products/basic-core-iot-development-kit)                                                                                                    |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |  Tone   |    :x:     |     :x:      |
-| [M5Stack M5Core2](https://shop.m5stack.com/products/m5stack-core2-esp32-iot-development-kit-v1-1)                                                                                           |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [M5Stack M5CoreS3](https://shop.m5stack.com/products/m5stack-cores3-esp32s3-lotdevelopment-kit)/[SE](https://shop.m5stack.com/products/m5stack-cores3-se-iot-controller-w-o-battery-bottom) |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [M5Stack StackChan](https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot) (CoreS3 on the robot body)                                                  |  :ok:  | :ok:  |   :ok:   |    ST25R3916 (I2C)   | :x:  |  :ok:  |   :x:   | AW88298 |    :x:     |     :x:      |
-| [JCZN CYD&#x2011;2432S028](https://www.aliexpress.us/item/3256804774970998.html)                                                                                                            |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
-| [Lilygo T&#x2011;Embed CC1101](https://lilygo.cc/products/t-embed-cc1101)                                                                                                                   |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: |  :ok:  |  :ok:   |  :ok:   |    :ok:    |     :x:      |
-| [Lilygo T&#x2011;Embed](https://lilygo.cc/products/t-embed)                                                                                                                                 |  :ok:  | :ok:  |   :ok:   |         :ok:         | :ok: |  :ok:  |  :ok:   |  :ok:   |    :x:     |     :x:      |
-| [Lilygo T-Display-S3](https://lilygo.cc/products/t-display-s3)                                                                                                                              |  :ok:  | :ok:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [Lilygo T&#x2011;Deck](https://lilygo.cc/products/t-deck) ([and pro](https://lilygo.cc/products/t-deck-plus-1))                                                                             |  :ok:  |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [Lilygo T-Watch-S3](https://lilygo.cc/products/t-watch-s3)                                                                                                                                  |  :x:   |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [Lilygo T-LoRa Pager](https://lilygo.cc/products/t-lora-pager)                                                                                                                              |  :x:   |  :x:  |   :x:    |         :x:          | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [Smoochiee V2](https://www.pcbway.com/project/shareproject/Bruce_PCB_Smoochiee_d6a0284b.html)                                                                                               |  :ok:  | :ok:  |   :x:    |         :ok:         | :x:  |  :ok:  |   :x:   |   :x:   |    :x:     |     :x:      |
-| [ESP32-C5](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c5/esp32-c5-devkitc-1/user_guide.html)                                                                           |  :ok:  | :ok:  |   :x:    |         :ok:         | :x:  |  :x:   |   :x:   |   :x:   |    :x:     |     :x:      |
-| [Bruce RF Reaper](https://www.elecrow.com/bruce-pcb-rf-reaper.html)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: but w/ ST25R3916 | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
-| [Elecrow 24B](https://www.elecrow.com/2-4inch-esp32-miner-lcd-display-2pcs-cryptocurrency-solo-miner-with-1000kh-s-hashrate.html)                                                            |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
-| [Elecrow 3.5"](https://www.elecrow.com/esp-terminal-with-esp32-3-5-inch-parallel-480x320-tft-capacitive-touch-display-rgb-by-chip-ili9488.html)                                                                                                                                                        |  :ok:  | :ok:  |   :ok:   |         :ok:         | :x:  | :ok:¹  |   :x:   |   :x:   |    :x:     |     :x:²     |
-| [NM-CYD-C5 + RF HAT](https://rockbase.shop/products/nm-cyd-c5-colorful)                                                                                                                         |  :ok:  | :ok:  |   :x:    | :ok: | :x:  |  :ok:  |  :ok:   |   :x:   |    :ok:    |     :x:      |
-| [Waveshare ESP32-C5-Touch-LCD-3.5](https://github.com/waveshareteam/ESP32-C5-Touch-LCD-3.5) |  :x:  | :x:  |   :x:    | :ok: | :ok: |  :x:   |  :x:   |  :ok:   |    :ok:    |     :x:      |
-² CYD have a LITE_VERSION version for Launcher Compatibility
-¹ Core, CYD and StickCs Bad-USB: [here](https://wiki.bruce.computer/features/others/#badusb)
+```text
+BruceRF/ProtoPirate
+```
 
-_LITE_VERSION_: TelNet, SSH, WireGuard, ScanHosts, RawSniffer, Brucegotchi, BLEBacon, BLEScan and Interpreter are NOT available for M5Launcher Compatibility
+i nadawać regenerowane ramki KeeLoq rolling code bez wielokrotnego przechodzenia przez `Sub Decode` oraz `Emulate / encode`.
 
-## :sparkles: Why and how does it look?
+### Funkcje KeeLoq Remote
 
-Bruce stems from a keen observation within the community focused on devices like Flipper Zero. While these devices offered a glimpse into the world of offensive security, there was a palpable sense that something more could be achieved without being that overpriced, particularly with the robust and modular hardware ecosystem provided by ESP32 Devices, Lilygo and M5Stack products.
+- Wybór zdekodowanego pliku `.sub` KeeLoq
+- Wyświetlanie aktualnego licznika, kodu przycisku i kroku licznika
+- Nadawanie kolejnej, regenerowanej ramki KeeLoq
+- Podgląd zaktualizowanego licznika, `Key` i `Hop`
+- Wybór kroku licznika: 1, 2, 3, 5 lub 10
+- Przeskakiwanie wartości licznika bez nadawania
+- Zmiana kodu przycisku KeeLoq
+- Przywrócenie licznika z oryginalnego pliku `.sub`
 
-![Bruce Main Menu](./media/pictures/pic1.png)
-![Bruce on M5Core](./media/pictures/core.png)
-![Bruce on Stick](./media/pictures/stick.png)
-![Bruce on CYD](./media/pictures/cyd.png)
-![Bruce on CYD with NM-RF-HAT](./media/pictures/bruce-cyd.png)
+### Trwały stan
 
-Other media can be [found here](./media/).
+Oryginalny plik `.sub` nie jest modyfikowany.
 
-## :clap: Acknowledgements
+Dla każdego pliku źródłowego ProtoPirate tworzy osobne pliki:
 
-- [@bmorcelli](https://github.com/bmorcelli) for new core and a bunch of new features, also porting to many devices!
-- [@IncursioHack](https://github.com/IncursioHack) for adding RF and RFID modules features.
-- [@Luidiblu](https://github.com/Luidiblu) for logo and UI design assistance.
-- [@eadmaster](https://github.com/eadmaster) for adding a lot of features.
-- [@rennancockles](https://github.com/rennancockles) for a lot of RFID code, refactoring and others features.
-- [@7h30th3r0n3](https://github.com/7h30th3r0n3) refactoring and a lot of help with WiFi attacks.
-- [@Tawank](https://github.com/Tawank) refactoring interpreter among many other things
-- [@geo-tp](https://github.com/geo-tp) contributing with lots of PRs and Wire Tools code
-- @pablonymous RF functions to read RAW Data
-- [Smoochiee](https://github.com/smoochiee) for Bruce PCB design.
-- TH3_KR4K3N for Stick cplus extender PCB design.
-- Everyone who contributed in some way to the project, thanks :heart:
+```text
+BruceRF/ProtoPirate/<nazwa>.sub
+BruceRF/ProtoPirate/<nazwa>.state
+BruceRF/ProtoPirate/<nazwa>.log
+```
 
-Bruce also stands on the shoulders of other great open-source firmware projects,
-which inspired features and code across the project:
+- `.sub` — oryginalny zdekodowany zapis
+- `.state` — aktualny licznik, krok i kod przycisku
+- `.log` — historia nadanych liczników
 
-- [ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) by [@justcallmekoko](https://github.com/justcallmekoko) — WiFi/Bluetooth offensive toolkit.
-- [Launcher](https://github.com/bmorcelli/Launcher) by [@bmorcelli](https://github.com/bmorcelli) — the multi-app launcher/bootloader for the devices.
-- [Evil-M5Project](https://github.com/7h30th3r0n3/Evil-M5Project) by [@7h30th3r0n3](https://github.com/7h30th3r0n3) — WiFi attack suite for M5Stack.
-- [M5Stick-Nemo](https://github.com/n0xa/m5stick-nemo) by [@n0xa](https://github.com/n0xa) — multi-tool firmware for M5Stick devices.
+Po restarcie urządzenia kolejne nadanie kontynuuje od licznika zapisanego w pliku `.state`.
 
-Bruce builds on many free-software libraries, and parts of the RF and NFC/RFID
-modules are derived from other projects. See [THIRD_PARTY.md](./THIRD_PARTY.md)
-for third-party attribution and copyleft-compliance details.
+## Zakres KeeLoq
 
-## :construction: Disclaimer
+Regeneracja rolling code KeeLoq jest obsługiwana tylko wtedy, gdy:
 
-Bruce is a tool for cyber offensive and red team operations, distributed under the terms of the Affero General Public License (AGPL). It is intended for legal and authorized security testing purposes only. Use of this software for any malicious or unauthorized activities is strictly prohibited. By downloading, installing, or using Bruce, you agree to comply with all applicable laws and regulations. This software is provided free of charge, and we do not accept payments for copies or modifications. The developers of Bruce assume no liability for any misuse of the software. Use at your own risk.
+- zdekodowany protokół to `KeeLoq`
+- producent został rozpoznany
+- dostępny jest numer seryjny
+
+Nieznani producenci KeeLoq pozostają w trybie replay, ponieważ niezawodna regeneracja rolling code nie może być zagwarantowana.
+
+Pozostałe protokoły RF nadal korzystają z istniejących ścieżek dekodowania, kodowania i emulacji.
+
+## Przetestowany przykład
+
+Workflow KeeLoq Remote został przetestowany z pilotem DTM_Neo.
+
+Trzy ramki wygenerowane przez ProtoPirate pokryły się z trzema kolejnymi ramkami fizycznego pilota:
+
+- wartości licznika były zgodne
+- wygenerowane wartości `Key` były zgodne
+- wygenerowane wartości `Hop` były zgodne
+- `Serial`, kod przycisku i część stała pozostały zgodne
+
+## Projekt nadrzędny
+
+Ten fork jest oparty na Bruce:
+
+https://github.com/pr3y/Bruce
+
+Ogólna dokumentacja Bruce, obsługiwany sprzęt, instrukcje instalacji i pełna lista funkcji znajdują się w projekcie nadrzędnym:
+
+https://github.com/pr3y/Bruce  
+https://wiki.bruce.computer/
+
+## Zastrzeżenie
+
+Ten fork jest przeznaczony wyłącznie do legalnych i autoryzowanych badań bezpieczeństwa, edukacji oraz testów. Nie należy używać go do zakłócania działania systemów, których nie jesteś właścicielem albo do których nie masz wyraźnego uprawnienia.
+
+Nadrzędny projekt Bruce jest dystrybuowany na licencji Affero General Public License (AGPL). Ten fork przestrzega tych samych wymagań licencyjnych.
