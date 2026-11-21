@@ -31,6 +31,7 @@ public:
         SCAN_OPTIONS,
         RESET,
         RANGE,
+        THRESHOLD,
         CLOSE_MENU,
         MAIN_MENU,
         NO_ACTION,
@@ -66,6 +67,7 @@ private:
 
     std::vector<RfCapture> captures;
     int selected = 0;
+    int scrollOffset = 0;
     bool listDirty = true;
 
     bool handle_list_input();
