@@ -451,18 +451,29 @@ String rf_protocol_encode_json(const char *input) {
     doc["raw"] = std::string(rawFile(pulses, code.frequency, code.preset).c_str());
     String updated = input;
     if (code.protocol == "KeeLoq") {
-        // Reflect the counter actually encoded into the regenerated KeeLoq hop.
+        // Reflect every regenerated KeeLoq value in the preview: the encoded
+        // counter, its resulting encrypted Key and the decrypted Hop.
+        char key[24], hop[16];
+        snprintf(key, sizeof(key), "%016llX", (unsigned long long)code.key);
+        snprintf(hop, sizeof(hop), "%08lX", (unsigned long)code.hop);
         std::istringstream lines(updated.c_str());
         std::string line;
         String result;
         while (std::getline(lines, line)) {
-            if (line.rfind("Counter:", 0) == 0)
+            if (line.rfind("Key:", 0) == 0) {
+                result += "Key:";
+                for (int i = 0; i < 16; i += 2)
+                    result += String(" ") + key[i] + key[i + 1];
+                result += "\n";
+            } else if (line.rfind("Counter:", 0) == 0) {
                 result += String("Counter: ") + String(code.cnt) + "\n";
-            else
+            } else if (line.rfind("Hop:", 0) == 0) {
+                result += String("Hop: ") + hop + "\n";
+            } else {
                 result += String(line.c_str()) + "\n";
+            }
         }
         updated = result;
-    }
-    doc["updated"] = updated.c_str();
+    }    doc["updated"] = updated.c_str();
     return doc.overflowed() ? failure("Not enough memory") : jsonString(doc);
 }
