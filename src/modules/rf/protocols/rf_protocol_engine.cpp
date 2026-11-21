@@ -5,6 +5,7 @@
 #include "rf_presets.h"
 #include "rf_registry.h"
 #include "rf_registry_ext.h"
+#include "../rf_scan.h"
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <atomic>
@@ -36,7 +37,8 @@ String failure(const char *message) {
 }
 std::string trim(const std::string &s) {
     const auto start = s.find_first_not_of(" \t\r");
-    return start == std::string::npos ? "" : s.substr(start, s.find_last_not_of(" \t\r") - start + 1);
+    if (start == std::string::npos) return "";
+    return s.substr(start, s.find_last_not_of(" \t\r") - start + 1);
 }
 bool unsignedValue(const std::string &s, uint64_t &out, uint64_t limit, int base = 10) {
     if (s.empty()) return false;
@@ -188,7 +190,7 @@ bool validPulses(
 }
 bool nativeDecode(const std::vector<int> &pulses, uint32_t frequency, const String &preset, RfCodes &out) {
     RfCodes result;
-    if (!rf_decode_keeloq(pulses, result)) {
+    if (!rf_try_keeloq(pulses, result)) {
         result = RfCodes{};
         if (!rf_decode_ook(pulses, result, true)) return false;
     }
