@@ -206,9 +206,9 @@ void addNativeFrame(JsonArray frames, const RfCodes &code, const char *original 
     frame["protocol"] = std::string(code.protocol.c_str());
     frame["encoder"] = rf_protocol_has_encoder(code.protocol);
     frame["validation"] = "not-verified";
-    // Beta encoders replay Key (CAME Twee uses Serial); editing decoded
-    // Button/Counter alone would not regenerate a corresponding payload.
-    frame["fieldEditing"] = false;
+    // KeeLoq supports dynamic counter/button regeneration through the native
+    // keystore flow; other native encoders replay their captured Key.
+    frame["fieldEditing"] = (code.protocol == "KeeLoq");
     frame["data"] = std::string(original ? original : rf_protocol_serialize(code).c_str());
     frame["text"] = std::string(rf_protocol_serialize(code).c_str());
 }
