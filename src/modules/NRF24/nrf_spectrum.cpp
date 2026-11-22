@@ -43,18 +43,18 @@ static String nrf_rangeLabel(uint8_t ch) {
     return "2.4 GHz range";
 }
 
-// Called synchronously between sweeps. The input is the complete published
-// report, not the visible page. No transmitter or other NRF mode uses this file.
-static String nrf_save_report(const uint8_t *active, int count, uint32_t observationMs) {
-    if (count <= 0) return "No active channels to save";
+// CSV v2: cumulative session snapshot. Elapsed time includes UI and SD pauses;
+// it is not continuous receiver dwell time. Saving never clears detections.
+static String nrf_save_report(const uint8_t *active, int count, uint32_t sessionElapsedMs) {
+    if (count <= 0) return "No channels found to save";
     if (count > CHANNELS) return "Invalid report";
     String csv;
     if (!csv.reserve(160 + count * 48)) return "Not enough memory";
-    csv = "format_version,nrf_channel,frequency_mhz,observation_ms,scan_min_channel,scan_max_channel\n";
+    csv = "format_version,nrf_channel,frequency_mhz,session_elapsed_ms,scan_min_channel,scan_max_channel\n";
     for (int i = 0; i < count; ++i) {
         if (active[i] >= CHANNELS) return "Invalid channel";
-        csv += "1," + String((unsigned int)active[i]) + "," +
-               String(2400u + active[i]) + "," + String(observationMs) + ",0,79\n";
+        csv += "2," + String((unsigned int)active[i]) + "," +
+               String(2400u + active[i]) + "," + String(sessionElapsedMs) + ",0,79\n";
     }
     NRFradio.stopListening();
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
@@ -96,53 +96,55 @@ static String nrf_save_report(const uint8_t *active, int count, uint32_t observa
 }
 
 static void nrf_active_report() {
-    bool hits[CHANNELS] = {false};
+    // Session-local state: reset only by leaving and reopening this view.
+    bool seen[CHANNELS] = {false};
     uint8_t active[CHANNELS] = {0};
     int count = 0, page = 0;
     const int rowH = 12;
     int rows = (tft.height() - 70) / rowH;
     if (rows < 1) rows = 1;
-    uint32_t windowStart = millis();
+    const uint32_t sessionStart = millis();
+    uint32_t lastRefresh = millis();
     uint32_t lastSweep = millis() - 20;
-    uint32_t observationMs = 0, statusStart = 0;
+    uint32_t statusStart = 0;
     String status;
-    bool redraw = true, ready = false;
+    bool redraw = true;
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setTextWrap(false);
-    check(SelPress); // discard the selection that opened this screen
+    check(SelPress);
     while (true) {
         if (check(EscPress) || returnToMenu) break;
         uint32_t now = millis();
         if (now - lastSweep >= 20) {
             lastSweep = now;
             scanChannels();
-            for (int i = 0; i < CHANNELS; ++i) hits[i] = hits[i] || lastRpd[i];
+            bool changed = false;
+            for (int i = 0; i < CHANNELS; ++i) {
+                if (lastRpd[i] && !seen[i]) {
+                    seen[i] = true;
+                    changed = true;
+                }
+            }
+            // Keep a sorted, duplicate-free list after every complete sweep.
+            if (changed) {
+                count = 0;
+                for (int i = 0; i < CHANNELS; ++i)
+                    if (seen[i]) active[count++] = (uint8_t)i;
+            }
             if (check(EscPress) || returnToMenu) break;
         }
-        if (millis() - windowStart >= 500) {
-            observationMs = millis() - windowStart;
-            count = 0;
-            for (int i = 0; i < CHANNELS; ++i) {
-                if (hits[i]) active[count++] = (uint8_t)i;
-                hits[i] = false;
-            }
-            windowStart = millis();
-            ready = true;
+        if (millis() - lastRefresh >= 500) {
+            lastRefresh = millis();
             redraw = true;
         }
         int pages = count ? (count + rows - 1) / rows : 1;
-        if (page >= pages) page = pages - 1;
         if (check(NextPress)) { page = (page + 1) % pages; redraw = true; }
         if (check(PrevPress)) { page = (page + pages - 1) % pages; redraw = true; }
         if (check(SelPress)) {
-            if (!ready) status = "Wait for first complete report";
-            else {
-                status = nrf_save_report(active, count, observationMs);
-                for (int i = 0; i < CHANNELS; ++i) hits[i] = false;
-                windowStart = millis();
-                lastSweep = millis() - 20;
-            }
+            status = nrf_save_report(active, count, millis() - sessionStart);
+            // Do not reset seen[], active[], count or sessionStart here.
+            lastSweep = millis() - 20;
             statusStart = millis();
             redraw = true;
         }
@@ -155,15 +157,14 @@ static void nrf_active_report() {
             tft.fillScreen(bruceConfig.bgColor);
             tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
             tft.setCursor(4, 4);
-            tft.print("NRF SCAN REPORT");
+            tft.print("NRF REPORT  Session: " + String((millis() - sessionStart) / 1000) + "s");
             tft.setCursor(4, 16);
-            if (ready) tft.print("Active: " + String(count) + "  Page: " + String(page + 1) + "/" + String(pages));
-            else tft.print("Scanning all 80 channels...");
+            tft.print("Found: " + String(count) + "  Page: " + String(page + 1) + "/" + String(pages));
             tft.setCursor(4, 28);
             tft.print("CH   MHz    Range*");
-            if (ready && count == 0) {
+            if (count == 0) {
                 tft.setCursor(4, 40);
-                tft.print("No RPD hits in last 500 ms");
+                tft.print("Scanning... No channels found yet");
             }
             for (int r = 0; r < rows && page * rows + r < count; ++r) {
                 unsigned int ch = active[page * rows + r];
