@@ -43,18 +43,21 @@ static String nrf_rangeLabel(uint8_t ch) {
     return "2.4 GHz range";
 }
 
-// CSV v2: cumulative session snapshot. Elapsed time includes UI and SD pauses;
-// it is not continuous receiver dwell time. Saving never clears detections.
+// CSV v3: cumulative session snapshot with the display's approximate range hint.
+// Elapsed time includes UI and SD pauses, not continuous receiver dwell time.
+// Saving never clears detections. range_hint is not protocol identification.
 static String nrf_save_report(const uint8_t *active, int count, uint32_t sessionElapsedMs) {
     if (count <= 0) return "No channels found to save";
     if (count > CHANNELS) return "Invalid report";
     String csv;
-    if (!csv.reserve(160 + count * 48)) return "Not enough memory";
-    csv = "format_version,nrf_channel,frequency_mhz,session_elapsed_ms,scan_min_channel,scan_max_channel\n";
+    if (!csv.reserve(160 + count * 80)) return "Not enough memory";
+    csv = "format_version,nrf_channel,frequency_mhz,session_elapsed_ms,scan_min_channel,scan_max_channel,range_hint\n";
     for (int i = 0; i < count; ++i) {
         if (active[i] >= CHANNELS) return "Invalid channel";
-        csv += "2," + String((unsigned int)active[i]) + "," +
-               String(2400u + active[i]) + "," + String(sessionElapsedMs) + ",0,79\n";
+        String hint = nrf_rangeLabel(active[i]);
+        hint.replace("\"", "\"\"");
+        csv += "3," + String((unsigned int)active[i]) + "," +
+               String(2400u + active[i]) + "," + String(sessionElapsedMs) + ",0,79,\"" + hint + "\"\n";
     }
     NRFradio.stopListening();
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
