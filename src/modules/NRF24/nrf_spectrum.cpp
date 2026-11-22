@@ -2,6 +2,7 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/spectrum_plot.h"
+#include "core/sd_functions.h"
 
 #define CHANNELS 80
 uint8_t channel[CHANNELS];
@@ -33,8 +34,7 @@ String scanChannels(bool web) {
     return result;
 }
 
-// Frequency context, never protocol identification. BLE also uses data
-// channels across the band. Zigbee centers: 2405 + 5*n MHz.
+// Frequency context only, not protocol identification.
 static String nrf_rangeLabel(uint8_t ch) {
     if (ch == 2 || ch == 26) return "BLE adv / shared";
     if (ch >= 4 && (ch % 5 == 0 || ch % 5 == 1 || ch % 5 == 4))
@@ -43,8 +43,58 @@ static String nrf_rangeLabel(uint8_t ch) {
     return "2.4 GHz range";
 }
 
-// Report uses raw RPD hits accumulated over a 500 ms observation window,
-// independently of the legacy plot smoothing. Each sweep covers all channels.
+// Called synchronously between sweeps. The input is the complete published
+// report, not the visible page. No transmitter or other NRF mode uses this file.
+static String nrf_save_report(const uint8_t *active, int count, uint32_t observationMs) {
+    if (count <= 0) return "No active channels to save";
+    if (count > CHANNELS) return "Invalid report";
+    String csv;
+    if (!csv.reserve(160 + count * 48)) return "Not enough memory";
+    csv = "format_version,nrf_channel,frequency_mhz,observation_ms,scan_min_channel,scan_max_channel\n";
+    for (int i = 0; i < count; ++i) {
+        if (active[i] >= CHANNELS) return "Invalid channel";
+        csv += "1," + String((unsigned int)active[i]) + "," +
+               String(2400u + active[i]) + "," + String(observationMs) + ",0,79\n";
+    }
+    NRFradio.stopListening();
+    digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
+    if (!setupSdCard()) return "SD unavailable";
+    const char *folder = "/BruceNRF";
+    if (!folderExists(SD, folder) && !SD.mkdir(folder)) return "Cannot create /BruceNRF";
+    char path[40];
+    bool found = false;
+    for (unsigned int n = 1; n <= 9999; ++n) {
+        if (check(EscPress) || returnToMenu) return "Save cancelled";
+        snprintf(path, sizeof(path), "/BruceNRF/scan_%04u.csv", n);
+        if (!SD.exists(path)) { found = true; break; }
+        if (n % 32 == 0) vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    if (!found) return "No free report filename";
+    File out = SD.open(path, FILE_WRITE);
+    if (!out) return "Cannot open report file";
+    size_t written = out.print(csv);
+    out.flush();
+    bool ok = written == csv.length() && out.size() == csv.length();
+    out.close();
+    if (ok) {
+        File verify = SD.open(path, FILE_READ);
+        ok = (bool)verify;
+        if (ok) {
+            ok = verify.size() == csv.length();
+            for (size_t i = 0; ok && i < csv.length(); ++i)
+                ok = verify.read() == (uint8_t)csv[i];
+            verify.close();
+        }
+    }
+    if (!ok) {
+        bool removed = SD.remove(path);
+        Serial.println(String("NRF CSV verification failed: ") + path);
+        return removed ? "Write failed; file removed" : "Write failed; check SD file";
+    }
+    Serial.println(String("NRF report saved: ") + path);
+    return String("Saved: ") + path;
+}
+
 static void nrf_active_report() {
     bool hits[CHANNELS] = {false};
     uint8_t active[CHANNELS] = {0};
@@ -54,10 +104,13 @@ static void nrf_active_report() {
     if (rows < 1) rows = 1;
     uint32_t windowStart = millis();
     uint32_t lastSweep = millis() - 20;
+    uint32_t observationMs = 0, statusStart = 0;
+    String status;
     bool redraw = true, ready = false;
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setTextWrap(false);
+    check(SelPress); // discard the selection that opened this screen
     while (true) {
         if (check(EscPress) || returnToMenu) break;
         uint32_t now = millis();
@@ -68,6 +121,7 @@ static void nrf_active_report() {
             if (check(EscPress) || returnToMenu) break;
         }
         if (millis() - windowStart >= 500) {
+            observationMs = millis() - windowStart;
             count = 0;
             for (int i = 0; i < CHANNELS; ++i) {
                 if (hits[i]) active[count++] = (uint8_t)i;
@@ -81,6 +135,21 @@ static void nrf_active_report() {
         if (page >= pages) page = pages - 1;
         if (check(NextPress)) { page = (page + 1) % pages; redraw = true; }
         if (check(PrevPress)) { page = (page + pages - 1) % pages; redraw = true; }
+        if (check(SelPress)) {
+            if (!ready) status = "Wait for first complete report";
+            else {
+                status = nrf_save_report(active, count, observationMs);
+                for (int i = 0; i < CHANNELS; ++i) hits[i] = false;
+                windowStart = millis();
+                lastSweep = millis() - 20;
+            }
+            statusStart = millis();
+            redraw = true;
+        }
+        if (status.length() && millis() - statusStart >= 4000) {
+            status = "";
+            redraw = true;
+        }
         if (redraw) {
             redraw = false;
             tft.fillScreen(bruceConfig.bgColor);
@@ -104,7 +173,7 @@ static void nrf_active_report() {
                 tft.print(String(number) + nrf_rangeLabel((uint8_t)ch));
             }
             tft.setCursor(4, tft.height() - 24);
-            tft.print("*Range only; not protocol ID");
+            tft.print(status.length() ? status : String("*Range only; ENTER: Save SD"));
             tft.setCursor(4, tft.height() - 12);
             tft.print("Prev/Next: page  ESC: Back");
         }
