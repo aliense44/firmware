@@ -112,9 +112,19 @@ void nrf_spectrum(NrfSpectrumView view) {
     for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
     NRFradio.setDataRate(RF24_1MBPS);
 
+    uint8_t activeChannels[CHANNELS];
+    uint8_t activeCount = 0;
+
     uint32_t lastFrame = 0, lastRow = 0;
     while (!check(EscPress)) {
         scanChannels();
+
+        activeCount = 0;
+        for (int i = 0; i < CHANNELS; i++) {
+            if (channel[i] > 0) {
+                activeChannels[activeCount++] = (uint8_t)i;
+            }
+        }
 
         int maxCh = 0;
         for (int i = 0; i < CHANNELS; i++) {
