@@ -133,6 +133,59 @@ void nrf_spectrum(NrfSpectrumView view) {
     uint8_t activeChannels[CHANNELS];
     uint8_t activeCount = 0;
 
+    if (view == NrfSpectrumView::ACTIVE_ONLY) {
+        while (!check(EscPress)) {
+            scanChannels();
+
+            activeCount = 0;
+            for (int i = 0; i < CHANNELS; i++) {
+                if (channel[i] > 0) {
+                    activeChannels[activeCount++] = (uint8_t)i;
+                }
+            }
+
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setTextSize(FM);
+            tft.setCursor(10, 10);
+            tft.println("NRF SCAN REPORT");
+            tft.println();
+
+            tft.print("Active: ");
+            if (activeCount == 0) {
+                tft.println("none");
+            } else {
+                for (uint8_t i = 0; i < activeCount; i++) {
+                    tft.print(activeChannels[i]);
+                    if (i + 1 < activeCount) tft.print(", ");
+                }
+                tft.println();
+            }
+
+            tft.println();
+
+            uint8_t shown = activeCount < 6 ? activeCount : 6;
+            for (uint8_t i = 0; i < shown; i++) {
+                uint8_t ch = activeChannels[i];
+                tft.print(String(2400 + ch) + " MHz  " + nrf_rangeLabel(ch));
+                tft.println();
+            }
+
+            tft.setCursor(10, tft.height() - 30);
+            tft.println("ESC: Back");
+
+            delay(500);
+        }
+
+        NRFradio.stopListening();
+        NRFradio.powerDown();
+        free(env);
+        free(envPeak);
+        plot.end();
+        delay(250);
+        return;
+    }
+
     uint32_t lastFrame = 0, lastRow = 0;
     while (!check(EscPress)) {
         scanChannels();
