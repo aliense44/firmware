@@ -10,6 +10,7 @@ void NRF24Menu::optionsMenu() {
     options.clear();
     options.push_back({"Information", nrf_info});
     options.push_back({"Spectrum", nrf_spectrum});
+    options.push_back({"Spectrum: Active only", []() { nrf_spectrum(NrfSpectrumView::ACTIVE_ONLY); }});
     #if !defined(LITE_VERSION)
     options.push_back({"MouseJack", nrf_mousejack});
     #endif
