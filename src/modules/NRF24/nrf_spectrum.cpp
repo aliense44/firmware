@@ -5,31 +5,24 @@
 
 #define CHANNELS 80
 uint8_t channel[CHANNELS];
-
-// The RPD accumulator settles toward 125, so that is full scale for the plot.
+static bool lastRpd[CHANNELS];
 #define NRF_FULL_SCALE 125
 
-// Sweeps the whole 2.4GHz band once and updates the smoothed per-channel
-// levels. Drawing lives in nrf_draw() so the WebUI can scan without a screen.
 String scanChannels(bool web) {
     String result = "{";
-
     uint8_t rpdValues[CHANNELS] = {0};
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
-
     for (int i = 0; i < CHANNELS; i++) {
         NRFradio.setChannel(i);
         NRFradio.startListening();
         delayMicroseconds(128);
         NRFradio.stopListening();
-
         int rpd = NRFradio.testRPD() ? 1 : 0;
+        lastRpd[i] = rpd != 0;
         channel[i] = (channel[i] * 3 + rpd * NRF_FULL_SCALE) / 4;
         rpdValues[i] = channel[i];
     }
-
     digitalWrite(bruceConfigPins.NRF24_bus.io0, HIGH);
-
     if (web) {
         for (int i = 0; i < CHANNELS; i++) {
             if (i > 0) result += ",";
@@ -37,38 +30,96 @@ String scanChannels(bool web) {
         }
         result += "}";
     }
-    return result; // "{1,32,45,...}" with 80 values, for the WebUI
+    return result;
 }
 
-// Approximate band context only. A carrier detected on an NRF channel cannot
-// be reliably identified as Wi-Fi, BLE or Zigbee from RSSI/RPD alone.
+// Frequency context, never protocol identification. BLE also uses data
+// channels across the band. Zigbee centers: 2405 + 5*n MHz.
 static String nrf_rangeLabel(uint8_t ch) {
-    if (ch == 2 || ch == 26) {
-        return "BLE adv / Wi-Fi range";
-    }
-
-    if (ch >= 5 && ch <= 30) {
-        return "Zigbee / Wi-Fi range";
-    }
-
-    if (ch >= 12 && ch <= 72) {
-        return "Wi-Fi range";
-    }
-
-    return "2.4 GHz activity";
+    if (ch == 2 || ch == 26) return "BLE adv / shared";
+    if (ch >= 4 && (ch % 5 == 0 || ch % 5 == 1 || ch % 5 == 4))
+        return "Zigbee / shared";
+    if (ch >= 2) return "BLE / Wi-Fi range";
+    return "2.4 GHz range";
 }
 
-// Spreads the 80 channel levels across the plot columns, interpolating between
-// carriers so the trace reads as a continuous band instead of 80 blocks.
+// Report uses raw RPD hits accumulated over a 500 ms observation window,
+// independently of the legacy plot smoothing. Each sweep covers all channels.
+static void nrf_active_report() {
+    bool hits[CHANNELS] = {false};
+    uint8_t active[CHANNELS] = {0};
+    int count = 0, page = 0;
+    const int rowH = 12;
+    int rows = (tft.height() - 70) / rowH;
+    if (rows < 1) rows = 1;
+    uint32_t windowStart = millis();
+    uint32_t lastSweep = millis() - 20;
+    bool redraw = true, ready = false;
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.setTextWrap(false);
+    while (true) {
+        if (check(EscPress) || returnToMenu) break;
+        uint32_t now = millis();
+        if (now - lastSweep >= 20) {
+            lastSweep = now;
+            scanChannels();
+            for (int i = 0; i < CHANNELS; ++i) hits[i] = hits[i] || lastRpd[i];
+            if (check(EscPress) || returnToMenu) break;
+        }
+        if (millis() - windowStart >= 500) {
+            count = 0;
+            for (int i = 0; i < CHANNELS; ++i) {
+                if (hits[i]) active[count++] = (uint8_t)i;
+                hits[i] = false;
+            }
+            windowStart = millis();
+            ready = true;
+            redraw = true;
+        }
+        int pages = count ? (count + rows - 1) / rows : 1;
+        if (page >= pages) page = pages - 1;
+        if (check(NextPress)) { page = (page + 1) % pages; redraw = true; }
+        if (check(PrevPress)) { page = (page + pages - 1) % pages; redraw = true; }
+        if (redraw) {
+            redraw = false;
+            tft.fillScreen(bruceConfig.bgColor);
+            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
+            tft.setCursor(4, 4);
+            tft.print("NRF SCAN REPORT");
+            tft.setCursor(4, 16);
+            if (ready) tft.print("Active: " + String(count) + "  Page: " + String(page + 1) + "/" + String(pages));
+            else tft.print("Scanning all 80 channels...");
+            tft.setCursor(4, 28);
+            tft.print("CH   MHz    Range*");
+            if (ready && count == 0) {
+                tft.setCursor(4, 40);
+                tft.print("No RPD hits in last 500 ms");
+            }
+            for (int r = 0; r < rows && page * rows + r < count; ++r) {
+                unsigned int ch = active[page * rows + r];
+                char number[20];
+                snprintf(number, sizeof(number), "%02u   %u   ", ch, 2400u + ch);
+                tft.setCursor(4, 40 + r * rowH);
+                tft.print(String(number) + nrf_rangeLabel((uint8_t)ch));
+            }
+            tft.setCursor(4, tft.height() - 24);
+            tft.print("*Range only; not protocol ID");
+            tft.setCursor(4, tft.height() - 12);
+            tft.print("Prev/Next: page  ESC: Back");
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    tft.setTextWrap(true);
+    tft.setTextSize(FM);
+}
+
 static void nrf_envelope(const uint8_t *lvl, uint8_t *env, int plotW) {
     for (int i = 0; i < plotW; i++) {
         int32_t pos = (int32_t)i * (CHANNELS - 1) * 256 / (plotW - 1);
         int ci = pos >> 8;
         int frac = pos & 0xff;
-        if (ci >= CHANNELS - 1) {
-            ci = CHANNELS - 2;
-            frac = 256;
-        }
+        if (ci >= CHANNELS - 1) { ci = CHANNELS - 2; frac = 256; }
         int v = lvl[ci] + (lvl[ci + 1] - lvl[ci]) * frac / 256;
         v = v * 100 / NRF_FULL_SCALE;
         env[i] = (uint8_t)(v < 0 ? 0 : (v > 100 ? 100 : v));
@@ -77,24 +128,15 @@ static void nrf_envelope(const uint8_t *lvl, uint8_t *env, int plotW) {
 
 void nrf_spectrum(NrfSpectrumView view) {
     SpectrumPlot plot;
-    if (!plot.begin("NRF Spectrum")) {
-        displayError("Out of memory", true);
-        return;
-    }
-
+    if (!plot.begin("NRF Spectrum")) { displayError("Out of memory", true); return; }
     const int plotW = plot.width();
     uint8_t *env = (uint8_t *)malloc(plotW);
     uint8_t *envPeak = (uint8_t *)malloc(plotW);
     uint8_t peak[CHANNELS] = {0};
     if (!env || !envPeak) {
-        free(env);
-        free(envPeak);
-        plot.end();
-        displayError("Out of memory", true);
-        return;
+        free(env); free(envPeak); plot.end();
+        displayError("Out of memory", true); return;
     }
-
-    // 2.400GHz to 2.479GHz, one tick every 20 channels
     const int tickCount = 5;
     int cols[tickCount];
     String labels[tickCount];
@@ -105,117 +147,43 @@ void nrf_spectrum(NrfSpectrumView view) {
     }
     plot.ruler(cols, labels, tickCount);
     plot.status("starting radio...");
-
-    if (!nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
+    if (!nrf_start(NRF_MODE_SPI)) {
         Serial.println("Fail Starting radio");
-        free(env);
-        free(envPeak);
-        plot.end();
-        displayError("NRF24 not found");
-        delay(500);
-        return;
+        free(env); free(envPeak); plot.end();
+        displayError("NRF24 not found"); delay(500); return;
     }
-
     NRFradio.setAutoAck(false);
-    NRFradio.disableCRC();       // accept any signal we find
-    NRFradio.setAddressWidth(2); // a reverse engineering tactic (not typically recommended)
+    NRFradio.disableCRC();
+    NRFradio.setAddressWidth(2);
     const uint8_t noiseAddress[][2] = {
-        {0x55, 0x55},
-        {0xAA, 0xAA},
-        {0xA0, 0xAA},
-        {0xAB, 0xAA},
-        {0xAC, 0xAA},
-        {0xAD, 0xAA}
+        {0x55, 0x55}, {0xAA, 0xAA}, {0xA0, 0xAA},
+        {0xAB, 0xAA}, {0xAC, 0xAA}, {0xAD, 0xAA}
     };
     for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
     NRFradio.setDataRate(RF24_1MBPS);
-
-    uint8_t activeChannels[CHANNELS];
-    uint8_t activeCount = 0;
-
     if (view == NrfSpectrumView::ACTIVE_ONLY) {
-        while (!check(EscPress)) {
-            scanChannels();
-
-            activeCount = 0;
-            for (int i = 0; i < CHANNELS; i++) {
-                if (channel[i] > 0) {
-                    activeChannels[activeCount++] = (uint8_t)i;
-                }
-            }
-
-            tft.fillScreen(bruceConfig.bgColor);
-            tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-            tft.setTextSize(FM);
-            tft.setCursor(10, 10);
-            tft.println("NRF SCAN REPORT");
-            tft.println();
-
-            tft.print("Active: ");
-            if (activeCount == 0) {
-                tft.println("none");
-            } else {
-                for (uint8_t i = 0; i < activeCount; i++) {
-                    tft.print(activeChannels[i]);
-                    if (i + 1 < activeCount) tft.print(", ");
-                }
-                tft.println();
-            }
-
-            tft.println();
-
-            uint8_t shown = activeCount < 6 ? activeCount : 6;
-            for (uint8_t i = 0; i < shown; i++) {
-                uint8_t ch = activeChannels[i];
-                tft.print(String(2400 + ch) + " MHz  " + nrf_rangeLabel(ch));
-                tft.println();
-            }
-
-            tft.setCursor(10, tft.height() - 30);
-            tft.println("ESC: Back");
-
-            delay(500);
-        }
-
+        nrf_active_report();
         NRFradio.stopListening();
         NRFradio.powerDown();
-        free(env);
-        free(envPeak);
-        plot.end();
-        delay(250);
+        free(env); free(envPeak); plot.end();
         return;
     }
-
     uint32_t lastFrame = 0, lastRow = 0;
     while (!check(EscPress)) {
         scanChannels();
-
-        activeCount = 0;
-        for (int i = 0; i < CHANNELS; i++) {
-            if (channel[i] > 0) {
-                activeChannels[activeCount++] = (uint8_t)i;
-            }
-        }
-
         int maxCh = 0;
         for (int i = 0; i < CHANNELS; i++) {
             if (channel[i] > peak[i]) peak[i] = channel[i];
-            else if (peak[i]) peak[i]--; // slow decay keeps the hold line readable
+            else if (peak[i]) peak[i]--;
             if (channel[i] > channel[maxCh]) maxCh = i;
         }
-
-        // A full sweep is far quicker than the panel needs to be repainted, so
-        // cap the redraw rate and let the radio keep integrating in between.
         if (millis() - lastFrame >= 40) {
             lastFrame = millis();
             nrf_envelope(channel, env, plotW);
             nrf_envelope(peak, envPeak, plotW);
-
-            // highlight the busiest carrier and its immediate neighbours
             int hlC = maxCh * (plotW - 1) / (CHANNELS - 1);
             int hlSpan = (2 * (plotW - 1)) / (CHANNELS - 1);
             plot.trace(env, envPeak, hlC - hlSpan, hlC + hlSpan);
-
             if (millis() - lastRow >= 120) {
                 lastRow = millis();
                 plot.pushRow(env);
@@ -227,11 +195,8 @@ void nrf_spectrum(NrfSpectrumView view) {
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
-
     NRFradio.stopListening();
     NRFradio.powerDown();
-    free(env);
-    free(envPeak);
-    plot.end();
+    free(env); free(envPeak); plot.end();
     delay(250);
 }
