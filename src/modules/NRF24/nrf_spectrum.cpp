@@ -57,7 +57,7 @@ static void nrf_envelope(const uint8_t *lvl, uint8_t *env, int plotW) {
     }
 }
 
-void nrf_spectrum() {
+void nrf_spectrum(NrfSpectrumView view) {
     SpectrumPlot plot;
     if (!plot.begin("NRF Spectrum")) {
         displayError("Out of memory", true);
