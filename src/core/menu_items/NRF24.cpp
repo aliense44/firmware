@@ -6,6 +6,10 @@
 #include "modules/NRF24/nrf_mousejack.h"
 #include "modules/NRF24/nrf_spectrum.h"
 
+static void nrf_spectrum_all_channels() {
+    nrf_spectrum(NrfSpectrumView::ALL_CHANNELS);
+}
+
 static void nrf_spectrum_active_only() {
     nrf_spectrum(NrfSpectrumView::ACTIVE_ONLY);
 }
@@ -13,7 +17,7 @@ static void nrf_spectrum_active_only() {
 void NRF24Menu::optionsMenu() {
     options.clear();
     options.push_back({"Information", nrf_info});
-    options.push_back({"Spectrum", nrf_spectrum});
+    options.push_back({"Spectrum", nrf_spectrum_all_channels});
     options.push_back({"Spectrum: Active only", nrf_spectrum_active_only});
     #if !defined(LITE_VERSION)
     options.push_back({"MouseJack", nrf_mousejack});
