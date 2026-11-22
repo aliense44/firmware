@@ -40,6 +40,24 @@ String scanChannels(bool web) {
     return result; // "{1,32,45,...}" with 80 values, for the WebUI
 }
 
+// Approximate band context only. A carrier detected on an NRF channel cannot
+// be reliably identified as Wi-Fi, BLE or Zigbee from RSSI/RPD alone.
+static String nrf_rangeLabel(uint8_t ch) {
+    if (ch == 2 || ch == 26) {
+        return "BLE adv / Wi-Fi range";
+    }
+
+    if (ch >= 5 && ch <= 30) {
+        return "Zigbee / Wi-Fi range";
+    }
+
+    if (ch >= 12 && ch <= 72) {
+        return "Wi-Fi range";
+    }
+
+    return "2.4 GHz activity";
+}
+
 // Spreads the 80 channel levels across the plot columns, interpolating between
 // carriers so the trace reads as a continuous band instead of 80 blocks.
 static void nrf_envelope(const uint8_t *lvl, uint8_t *env, int plotW) {
