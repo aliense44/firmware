@@ -12,7 +12,40 @@ This fork focuses on:
 - Sub-GHz protocol workflows
 - KeeLoq rolling-code handling
 - Practical RF file management
+- NRF Jammer usability improvements
 - Improvements that can later be proposed to the upstream Bruce project
+
+## Custom startup branding and version
+
+The boot screen displays `Bruce & Aliense44` instead of the default `Bruce` name.
+
+The displayed firmware version is manually set in `platformio.ini`:
+
+```text
+a8fa5f7a - 23.11.2026
+```
+
+This makes it easy to identify the firmware build currently installed on the device.
+
+## NRF Jammer
+
+The NRF Jammer menu now includes:
+
+- Start
+- Time limit
+- Back
+
+The time limit can be selected from the following values:
+
+- 30 seconds
+- 1 minute
+- 2 minutes
+- 3 minutes
+- 5 minutes
+
+The `formatNrfTimeout()` function formats the selected duration in a readable form, for example `30 s`, `1 min`, or `1 min 30 s`.
+
+While the jammer is running, the screen shows a `TIME : ...` line with a `(10 s refresh)` note. The countdown display refreshes every 10 seconds; during the final 5 seconds, it refreshes every second.
 
 ## ProtoPirate Remote
 
@@ -111,7 +144,40 @@ Ten fork koncentruje się na:
 - workflow dla protokołów Sub-GHz
 - obsłudze rolling code KeeLoq
 - praktycznym zarządzaniu plikami RF
+- ulepszeniach użyteczności NRF Jammer
 - ulepszeniach, które później mogą zostać zaproponowane upstreamowi Bruce
+
+## Niestandardowy ekran startowy i wersja
+
+Ekran startowy wyświetla nazwę `Bruce & Aliense44` zamiast domyślnego `Bruce`.
+
+Wyświetlana wersja firmware jest ustawiana ręcznie w pliku `platformio.ini`:
+
+```text
+a8fa5f7a - 23.11.2026
+```
+
+Dzięki temu łatwo rozpoznać, która wersja firmware jest aktualnie zainstalowana na urządzeniu.
+
+## NRF Jammer
+
+Menu NRF Jammer zawiera teraz:
+
+- Start
+- Limit czasu
+- Back
+
+Limit czasu można wybrać z następujących wartości:
+
+- 30 sekund
+- 1 minuta
+- 2 minuty
+- 3 minuty
+- 5 minut
+
+Funkcja `formatNrfTimeout()` formatuje wybrany czas w czytelnej postaci, np. `30 s`, `1 min` albo `1 min 30 s`.
+
+Podczas działania jammera na ekranie wyświetla się linia `TIME : ...` z dopiskiem `(10 s refresh)`. Licznik odświeża ekran co 10 sekund; w ostatnich 5 sekundach odświeża go co sekundę.
 
 ## ProtoPirate Remote
 
