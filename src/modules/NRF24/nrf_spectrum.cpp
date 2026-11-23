@@ -4,7 +4,7 @@
 #include "core/spectrum_plot.h"
 #include "core/sd_functions.h"
 
-#define CHANNELS 80
+#define CHANNELS 128 // Pełny zakres kanałów NRF24 (0-127)
 uint8_t channel[CHANNELS];
 static bool lastRpd[CHANNELS];
 #define NRF_FULL_SCALE 125
@@ -42,6 +42,20 @@ static String nrf_rangeLabel(uint8_t ch) {
     if (ch >= 2) return "BLE / Wi-Fi range";
     return "2.4 GHz range";
 }
+static uint8_t nrf_categoryMask(uint8_t ch) {
+    uint8_t mask = 0;
+
+    if (ch >= 1 && ch <= 13) mask |= 0x01; // WiFi
+    if (ch >= 2 && ch <= 39) mask |= 0x02; // BLE
+    if (ch == 2 || ch == 26) mask |= 0x04; // BLE adv
+    if (ch >= 2 && ch <= 79) mask |= 0x08; // Bluetooth
+    if (ch >= 32 && ch <= 70 && ch % 2 == 0) mask |= 0x10; // USB
+    if (ch >= 60 && ch <= 124 && ch % 2 == 0) mask |= 0x20; // Video
+    if (ch >= 1 && ch <= 39 && ch % 2 == 1) mask |= 0x40; // RC
+    if (ch >= 4 && ch <= 81 && (ch % 5 == 0 || ch % 5 == 1 || ch % 5 == 4)) mask |= 0x80; // Zigbee
+
+    return mask;
+}
 
 // CSV v3: cumulative session snapshot with the display's approximate range hint.
 // Elapsed time includes UI and SD pauses, not continuous receiver dwell time.
@@ -51,13 +65,17 @@ static String nrf_save_report(const uint8_t *active, int count, uint32_t session
     if (count > CHANNELS) return "Invalid report";
     String csv;
     if (!csv.reserve(160 + count * 80)) return "Not enough memory";
-    csv = "format_version,nrf_channel,frequency_mhz,session_elapsed_ms,scan_min_channel,scan_max_channel,range_hint\n";
+csv = "format_version,nrf_channel,frequency_mhz,session_elapsed_ms,scan_min_channel,scan_max_channel,range_hint,category_mask\n";
     for (int i = 0; i < count; ++i) {
         if (active[i] >= CHANNELS) return "Invalid channel";
-        String hint = nrf_rangeLabel(active[i]);
-        hint.replace("\"", "\"\"");
-        csv += "3," + String((unsigned int)active[i]) + "," +
-               String(2400u + active[i]) + "," + String(sessionElapsedMs) + ",0,79,\"" + hint + "\"\n";
+String hint = nrf_rangeLabel(active[i]);
+hint.replace("\"", "\"\"");
+
+uint8_t categoryMask = nrf_categoryMask(active[i]);
+
+csv += "5," + String((unsigned int)active[i]) + "," +
+       String(2400u + active[i]) + "," + String(sessionElapsedMs) + ",0,79,\"" + hint + "\"," +
+       String((unsigned int)categoryMask) + "\n";
     }
     NRFradio.stopListening();
     digitalWrite(bruceConfigPins.NRF24_bus.io0, LOW);
