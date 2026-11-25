@@ -5,6 +5,7 @@
 #include "rf_presets.h"
 #include "rf_registry.h"
 #include "rf_registry_ext.h"
+#include "../rf_scan.h"
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <atomic>
@@ -36,7 +37,8 @@ String failure(const char *message) {
 }
 std::string trim(const std::string &s) {
     const auto start = s.find_first_not_of(" \t\r");
-    return start == std::string::npos ? "" : s.substr(start, s.find_last_not_of(" \t\r") - start + 1);
+    if (start == std::string::npos) return "";
+    return s.substr(start, s.find_last_not_of(" \t\r") - start + 1);
 }
 bool unsignedValue(const std::string &s, uint64_t &out, uint64_t limit, int base = 10) {
     if (s.empty()) return false;
@@ -188,7 +190,7 @@ bool validPulses(
 }
 bool nativeDecode(const std::vector<int> &pulses, uint32_t frequency, const String &preset, RfCodes &out) {
     RfCodes result;
-    if (!rf_decode_keeloq(pulses, result)) {
+    if (!rf_try_keeloq(pulses, result)) {
         result = RfCodes{};
         if (!rf_decode_ook(pulses, result, true)) return false;
     }
@@ -204,9 +206,9 @@ void addNativeFrame(JsonArray frames, const RfCodes &code, const char *original 
     frame["protocol"] = std::string(code.protocol.c_str());
     frame["encoder"] = rf_protocol_has_encoder(code.protocol);
     frame["validation"] = "not-verified";
-    // Beta encoders replay Key (CAME Twee uses Serial); editing decoded
-    // Button/Counter alone would not regenerate a corresponding payload.
-    frame["fieldEditing"] = false;
+    // KeeLoq supports dynamic counter/button regeneration through the native
+    // keystore flow; other native encoders replay their captured Key.
+    frame["fieldEditing"] = (code.protocol == "KeeLoq");
     frame["data"] = std::string(original ? original : rf_protocol_serialize(code).c_str());
     frame["text"] = std::string(rf_protocol_serialize(code).c_str());
 }
@@ -432,6 +434,14 @@ String rf_protocol_encode_json(const char *input) {
     uint64_t repeat = 3;
     if (fields.count("Repeat") && (!unsignedValue(fields["Repeat"], repeat, 20) || !repeat))
         return failure("Invalid repeat count");
+    // Regenerate the KeeLoq hop for the current counter and identified
+    // manufacturer before encoding. This lets ProtoPirate emulation transmit
+    // a fresh rolling-code frame instead of replaying the captured key.
+    // Unknown manufacturers keep the previous replay behavior.
+    if (code.protocol == "KeeLoq" && !code.mf_name.isEmpty() && code.mf_name != "Unknown" &&
+        code.serial != 0) {
+        code.keeloq_step(0);
+    }
     std::vector<int> pulses;
     if (!rf_protocol_encode(code, (int)repeat, pulses))
         return failure("No compatible encoder or invalid payload");
@@ -439,6 +449,31 @@ String rf_protocol_encode_json(const char *input) {
     doc["ok"] = true;
     doc["pulses"] = pulses.size();
     doc["raw"] = std::string(rawFile(pulses, code.frequency, code.preset).c_str());
-    doc["updated"] = input; // Preserve all extra fields; encoding never advances counters implicitly.
+    String updated = input;
+    if (code.protocol == "KeeLoq") {
+        // Reflect every regenerated KeeLoq value in the preview: the encoded
+        // counter, its resulting encrypted Key and the decrypted Hop.
+        char key[24], hop[16];
+        snprintf(key, sizeof(key), "%016llX", (unsigned long long)code.key);
+        snprintf(hop, sizeof(hop), "%08lX", (unsigned long)code.hop);
+        std::istringstream lines(updated.c_str());
+        std::string line;
+        String result;
+        while (std::getline(lines, line)) {
+            if (line.rfind("Key:", 0) == 0) {
+                result += "Key:";
+                for (int i = 0; i < 16; i += 2)
+                    result += String(" ") + key[i] + key[i + 1];
+                result += "\n";
+            } else if (line.rfind("Counter:", 0) == 0) {
+                result += String("Counter: ") + String(code.cnt) + "\n";
+            } else if (line.rfind("Hop:", 0) == 0) {
+                result += String("Hop: ") + hop + "\n";
+            } else {
+                result += String(line.c_str()) + "\n";
+            }
+        }
+        updated = result;
+    }    doc["updated"] = updated.c_str();
     return doc.overflowed() ? failure("Not enough memory") : jsonString(doc);
 }

@@ -12,7 +12,127 @@ This fork focuses on:
 - Sub-GHz protocol workflows
 - KeeLoq rolling-code handling
 - Practical RF file management
+- NRF24 spectrum analysis and jamming workflow
 - Improvements that can later be proposed to the upstream Bruce project
+
+## Custom startup branding and version
+
+The boot screen displays `Bruce & Aliense44` instead of the default `Bruce` name.
+
+The displayed firmware version is manually set in `platformio.ini`:
+
+```text
+a8fa5f7a - 23.11.2026
+```
+
+This makes it easy to identify the firmware build currently installed on the device.
+
+## NRF24 tools
+
+This fork improves the NRF24 spectrum, active-channel reporting, and jamming workflow.
+
+### NRF Spectrum
+
+NRF Spectrum scans all 128 NRF24 channels, from channel 0 to channel 127.
+
+It displays a live spectrum view with:
+
+- Current channel activity
+- Peak-hold indication
+- The strongest currently detected channel
+- A graphical spectrum plot
+
+The spectrum is refreshed approximately every 40 ms, while a new plot row is added approximately every 120 ms.
+
+### NRF Spectrum Active Report
+
+The **Active** view collects channels that showed activity during the current session.
+
+It provides:
+
+- A session-specific list of active NRF24 channels
+- Channel number and approximate frequency
+- A human-readable approximate range hint, such as BLE, Wi-Fi, Bluetooth, USB, video, RC, or Zigbee
+- Paging through detected channels
+- A session elapsed-time counter
+- Saving the report to the microSD card
+
+The report is saved as:
+
+```text
+BruceNRF/scan_NNNN.csv
+```
+
+Saving a report does not clear the channels collected during the session. The active-channel list is reset only when the Active view is closed and opened again.
+
+The CSV uses version 5 and contains these columns:
+
+```text
+formatversion,nrfchannel,frequencymhz,sessionelapsedms,scanminchannel,scanmaxchannel,rangehint,categorymask
+```
+
+`range_hint` describes only the approximate frequency context. It is not protocol identification.
+
+### NRF Jammer
+
+The NRF Jammer menu includes:
+
+- Start
+- Load Scan File
+- Limit
+- Back
+
+The safety timeout can be selected from:
+
+- 30 seconds
+- 1 minute
+- 2 minutes
+- 3 minutes
+- 5 minutes
+
+The `formatNrfTimeout()` function displays the remaining time in a readable form, for example `30 s`, `1 min`, or `1 min 30 s`.
+
+While the jammer is running, the screen shows `TIME : ... (10 s refresh)`. The countdown display refreshes every 10 seconds; during the final 5 seconds, it refreshes every second.
+
+### Jammer channel sources
+
+The jammer can use either its built-in channel lists or channels loaded from a CSV report created by NRF Spectrum Active Report.
+
+CSV files are selected from:
+
+```text
+BruceNRF
+```
+
+The loader reads NRF24 channels from the CSV, validates that they are within the 1-127 channel range and 2.400-2.500 GHz frequency range, and reads the optional `categorymask` column.
+
+When a scan file is loaded, the jammer automatically uses random channel hopping.
+
+### Jammer channel categories
+
+The jammer can filter loaded channels by category:
+
+- Test
+- Wi-Fi
+- BLE
+- BLE Adv Priority
+- Bluetooth
+- USB
+- Video Stream
+- RC
+- Zigbee
+- Full
+
+The category filter uses the `categorymask` value stored in the CSV report.
+
+### Jammer hopping
+
+The jammer supports:
+
+- Sequential hopping
+- Random hopping
+
+The selected mode and hopping behaviour can be changed while the jammer is running.
 
 ## ProtoPirate Remote
 
@@ -111,7 +231,127 @@ Ten fork koncentruje się na:
 - workflow dla protokołów Sub-GHz
 - obsłudze rolling code KeeLoq
 - praktycznym zarządzaniu plikami RF
+- analizie widma, raportowaniu aktywnych kanałów i workflow jammingu NRF24
 - ulepszeniach, które później mogą zostać zaproponowane upstreamowi Bruce
+
+## Niestandardowy ekran startowy i wersja
+
+Ekran startowy wyświetla nazwę `Bruce & Aliense44` zamiast domyślnego `Bruce`.
+
+Wyświetlana wersja firmware jest ustawiana ręcznie w pliku `platformio.ini`:
+
+```text
+a8fa5f7a - 23.11.2026
+```
+
+Dzięki temu łatwo rozpoznać, która wersja firmware jest aktualnie zainstalowana na urządzeniu.
+
+## Narzędzia NRF24
+
+Ten fork rozwija workflow analizy widma, raportowania aktywnych kanałów oraz jammingu NRF24.
+
+### NRF Spectrum
+
+NRF Spectrum skanuje wszystkie 128 kanałów NRF24, od kanału 0 do 127.
+
+Wyświetla żywy widok widma z:
+
+- aktualną aktywnością kanałów
+- wskazaniem szczytów
+- aktualnie najsilniejszym wykrytym kanałem
+- graficznym wykresem widma
+
+Widmo jest odświeżane około co 40 ms, a nowy wiersz wykresu jest dodawany około co 120 ms.
+
+### NRF Spectrum Active Report
+
+Widok **Active** zbiera kanały, na których wykryto aktywność podczas bieżącej sesji.
+
+Oferuje:
+
+- listę aktywnych kanałów NRF24 zebranych w sesji
+- numer kanału i przybliżoną częstotliwość
+- czytelny, przybliżony opis zakresu, np. BLE, Wi‑Fi, Bluetooth, USB, wideo, RC lub Zigbee
+- stronicowanie wykrytych kanałów
+- licznik czasu trwania sesji
+- zapis raportu na kartę microSD
+
+Raport jest zapisywany jako:
+
+```text
+BruceNRF/scan_NNNN.csv
+```
+
+Zapis raportu nie czyści kanałów zebranych podczas sesji. Lista aktywnych kanałów jest resetowana dopiero po zamknięciu i ponownym otwarciu widoku Active.
+
+Plik CSV używa wersji 5 i zawiera kolumny:
+
+```text
+formatversion,nrfchannel,frequencymhz,sessionelapsedms,scanminchannel,scanmaxchannel,rangehint,categorymask
+```
+
+`range_hint` opisuje wyłącznie przybliżony kontekst częstotliwości. Nie jest identyfikacją protokołu.
+
+### NRF Jammer
+
+Menu NRF Jammer zawiera:
+
+- Start
+- Load Scan File
+- Limit
+- Back
+
+Limit bezpieczeństwa można wybrać z następujących wartości:
+
+- 30 sekund
+- 1 minuta
+- 2 minuty
+- 3 minuty
+- 5 minut
+
+Funkcja `formatNrfTimeout()` wyświetla pozostały czas w czytelnej postaci, np. `30 s`, `1 min` albo `1 min 30 s`.
+
+Podczas działania jammera na ekranie wyświetla się `TIME : ... (10 s refresh)`. Licznik odświeża ekran co 10 sekund; w ostatnich 5 sekundach odświeża go co sekundę.
+
+### Źródła kanałów jammera
+
+Jammer może korzystać z wbudowanych list kanałów albo z kanałów załadowanych z raportu CSV utworzonego przez NRF Spectrum Active Report.
+
+Pliki CSV wybiera się z folderu:
+
+```text
+BruceNRF
+```
+
+Loader odczytuje kanały NRF24 z pliku CSV, sprawdza, czy mieszczą się w zakresie 1-127 oraz 2,400-2,500 GHz, i odczytuje opcjonalną kolumnę `categorymask`.
+
+Po załadowaniu pliku skanu jammer automatycznie używa losowego przeskakiwania kanałów.
+
+### Kategorie kanałów jammera
+
+Jammer może filtrować załadowane kanały według kategorii:
+
+- Test
+- Wi‑Fi
+- BLE
+- BLE Adv Priority
+- Bluetooth
+- USB
+- Video Stream
+- RC
+- Zigbee
+- Full
+
+Filtr kategorii korzysta z wartości `categorymask` zapisanej w raporcie CSV.
+
+### Hopping jammera
+
+Jammer obsługuje:
+
+- przeskok sekwencyjny
+- przeskok losowy
+
+Wybrany tryb i sposób przeskoków można zmieniać podczas działania jammera.
 
 ## ProtoPirate Remote
 

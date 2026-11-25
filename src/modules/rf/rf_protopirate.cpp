@@ -648,7 +648,184 @@ class ProtoPirate {
             if (receiveRequested) return;
         }
     }
-    void settings() {
+    void Remote() {
+        FS *fs = nullptr;
+        if (!getFsStorage(fs)) return;
+
+        const String directory = "/BruceRF/ProtoPirate";
+        if (!fs->exists(directory)) fs->mkdir(directory);
+
+        const String path = loopSD(*fs, true, "SUB", directory);
+        if (path.isEmpty()) return;
+
+        File file = fs->open(path, FILE_READ);
+        if (!file) {
+            displayError("Cannot open SubGhz file", true);
+            return;
+        }
+        const size_t expected = file.size();
+        if (expected > RF_DECODE_MAX_FILE_BYTES) {
+            file.close();
+            displayError("File exceeds 1 MiB import limit", true);
+            return;
+        }
+        String input;
+        if (!input.reserve(expected + 1)) {
+            file.close();
+            displayError("Not enough memory to load file", true);
+            return;
+        }
+        char buffer[512];
+        while (input.length() < expected) {
+            const size_t wanted = std::min(sizeof(buffer), expected - input.length());
+            const size_t got = file.readBytes(buffer, wanted);
+            if (!got || !input.concat(buffer, got)) {
+                file.close();
+                displayError("Incomplete or invalid text file", true);
+                return;
+            }
+            delay(0);
+        }
+        file.close();
+
+        JsonDocument decoded;
+        if (!response(rf_protocol_decode_json(input.c_str()), decoded)) return;
+        JsonArray frames = decoded["frames"].as<JsonArray>();
+        if (frames.size() == 0) {
+            displayError("No decodable frame", true);
+            return;
+        }
+        JsonObject frame = frames[0];
+        Entry entry = {
+            frame["protocol"] | "",
+            frame["text"] | "",
+            frame["data"] | "",
+            nullptr,
+            frame["encoder"] | false,
+            frame["fieldEditing"] | true
+        };
+
+        if (entry.name != "KeeLoq" || !entry.fieldEditing || !entry.encoder) {
+            displayError("Remote supports KeeLoq only", true);
+            return;
+        }
+
+        const String baseName = path.substring(path.lastIndexOf('/') + 1);
+        const String statePath = directory + "/" + baseName + ".state";
+        const String logPath = directory + "/" + baseName + ".log";
+
+        uint32_t counter = 0, button = 0, step = 1;
+        number(field(entry.data, "Counter"), counter);
+        number(field(entry.data, "Button"), button);
+
+        File state = fs->open(statePath, FILE_READ);
+        if (state) {
+            String saved = state.readString();
+            state.close();
+            String value = field(saved, "counter");
+            number(value, counter);
+            value = field(saved, "button");
+            if (!value.isEmpty()) number(value, button);
+            value = field(saved, "step");
+            number(value, step);
+            if (!step) step = 1;
+        }
+
+        auto buildSource = [&](uint32_t nextCounter) {
+            String source = setField(entry.data, "Repeat", "3");
+            source = setField(source, "Counter", String(nextCounter));
+            source = setField(source, "Button", String(button));
+            return source;
+        };
+
+        auto saveState = [&](uint32_t usedCounter) {
+            String stateData = "source: " + baseName + "\ncounter: " + String(usedCounter) +
+                               "\nstep: " + String(step) + "\nbutton: " + String(button) + "\n";
+            File output = fs->open(statePath, FILE_WRITE);
+            if (output) {
+                output.print(stateData);
+                output.close();
+            }
+            File log = fs->open(logPath, FILE_APPEND);
+            if (log) {
+                log.print("counter: " + String(usedCounter) + " button: " + String(button) + "\n");
+                log.close();
+            }
+        };
+
+        for (;;) {
+            const uint32_t nextCounter = (counter + step) & 65535U;
+            String buttonLabel = String(button) + " (" + buttonName(entry, button) + ")";
+
+            int action = choose(
+                "KeeLoq Remote",
+                {"Transmit next: " + String(nextCounter),
+                 "Preview next frame",
+                 "Set step: " + String(step),
+                 "Skip +1",
+                 "Skip +5",
+                 "Button: " + buttonLabel,
+                 "Reset to file",
+                 "Back"},
+                0, MENU_TYPE_REGULAR
+            );
+
+            if (action < 0 || action == 7) return;
+
+            if (action == 2) {
+                std::vector<String> steps = {"1", "2", "3", "5", "10"};
+                int selected = choose("Set step", steps, 0, MENU_TYPE_REGULAR);
+                if (selected >= 0) step = String(steps[selected]).toInt();
+                continue;
+            }
+
+            if (action == 3) {
+                counter = (counter + 1) & 65535U;
+                continue;
+            }
+
+            if (action == 4) {
+                counter = (counter + 5) & 65535U;
+                continue;
+            }
+
+            if (action == 5) {
+                button = selectButton(entry, button);
+                continue;
+            }
+
+            if (action == 6) {
+                number(field(entry.data, "Counter"), counter);
+                continue;
+            }
+
+            String source = buildSource(nextCounter);
+            JsonDocument encoded;
+            if (!response(rf_protocol_encode_json(source.c_str()), encoded)) continue;
+
+            if (action == 1) {
+                view(
+                    "Next frame",
+                    "Counter: " + String(nextCounter) + "\n" +
+                        String(encoded["updated"] | "")
+                );
+                continue;
+            }
+
+            displayInfo("Transmitting...", false);
+            if (!rf_protocol_transmit_raw(encoded["raw"] | "")) {
+                displayError("Transmission failed", true);
+                continue;
+            }
+
+            counter = nextCounter;
+            saveState(counter);
+            displaySuccess("Sent counter " + String(counter), true);
+        }
+    }
+
+   
+void settings() {
         for (;;) {
             drawCaptureBackground();
             int action = choose(
@@ -686,6 +863,7 @@ public:
                                                 "ProtoPirate / Emulation ON",
                                                 {"Receive signal",
                                                  "Sub Decode / files",
+                                                 "Remote",
                                                  "Signal history",
                                                  "Receiver settings",
                                                  "Protocol catalogue",
@@ -694,10 +872,11 @@ public:
                                                 0, MENU_TYPE_REGULAR
                                             );
             receiveRequested = false;
-            if (action < 0 || action == 6) break;
+            if (action < 0 || action == 7) break;
             if (action == 0) receive();
             else if (action == 1) browse();
-            else if (action == 2) {
+            else if (action == 2) Remote();
+            else if (action == 3) {
                 if (history.empty()) {
                     displayInfo("No captures this session", true);
                     continue;
@@ -706,8 +885,8 @@ public:
                 for (size_t i = history.size(); i > 0; --i) names.push_back(captureLabel(i - 1));
                 int selected = choose("Signal history", names);
                 if (selected >= 0) openHistoryEntry(history.size() - 1 - selected);
-            } else if (action == 3) settings();
-            else if (action == 4) {
+            } else if (action == 4) settings();
+            else if (action == 5) {
                 JsonDocument catalogue;
                 if (!response(rf_protocol_catalog_json(), catalogue)) continue;
                 String text = "Shared Bruce beta + ProtoPirate protocols\nEmulation enabled by default\n\n";
@@ -724,7 +903,7 @@ public:
                     "and brute-force recovery are not ported."
                 );
         }
-        deinitRfModule();
+deinitRfModule();
         returnToMenu = true;
     }
 };
