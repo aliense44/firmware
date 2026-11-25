@@ -1147,7 +1147,7 @@ Opt_Coord drawOptions(
 
 /***************************************************************************************
 ** Function name: drawSubmenu
-** Description:   draw a modern styled submenu list.
+** Description:   draw a compact three-item submenu carousel.
 ***************************************************************************************/
 void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     drawStatusBar();
@@ -1156,127 +1156,186 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     if (menuSize <= 0) return;
     if (index < 0 || index >= menuSize) index = 0;
 
-    // Vertical submenu list: left aligned, bordered cards, gradient-like
-    // backgrounds and a strong visual state for the currently selected item.
-    // The gradient is rendered as several horizontal bands for compatibility
-    // with TFT displays that do not provide a generic gradient primitive.
-    const int outerX = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
-    const int outerW = tftWidth - 2 * outerX;
-    const int contentTop = STATUS_BAR_HEIGHT + LH * FP + 5;
+    const int titleY = STATUS_BAR_HEIGHT;
+    const int titleH = LH * FP + 3;
+    const int contentTop = titleY + titleH + 2;
     const int contentBottom = tftHeight - BORDER_OFFSET_FROM_SCREEN_EDGE - 2;
-    const int contentH = contentBottom - contentTop;
+    const int contentHeight = max(1, contentBottom - contentTop);
 
-    const int itemH = FM * LH + 14;
-    const int itemGap = 5;
-    const int pitch = itemH + itemGap;
-    int visibleItems = contentH / pitch;
-    if (visibleItems < 1) visibleItems = 1;
+    const int contentX = BORDER_OFFSET_FROM_SCREEN_EDGE + 1;
+    const int contentW = tftWidth - 2 * contentX;
+    const int maxLabelWidth = max(1, contentW - 12);
+    const uint8_t menuFont = SMOOTH_FONT;
 
-    // Keep the selected item visible while scrolling through long submenus.
-    int first = index - visibleItems / 2;
-    if (first < 0) first = 0;
-    if (first + visibleItems > menuSize) first = menuSize - visibleItems;
-    if (first < 0) first = 0;
-
-    tft.fillRect(outerX, contentTop, outerW, contentH, bruceConfig.bgColor);
-
-    // Title.
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FP);
     tft.setTextDatum(TL_DATUM);
-    tft.drawString(title, BORDER_PAD_X, STATUS_BAR_HEIGHT);
+    tft.fillRect(contentX, titleY, contentW, titleH, bruceConfig.bgColor);
+    tft.drawString(title, BORDER_PAD_X, titleY);
 
-    auto rgb565 = [](uint8_t r, uint8_t g, uint8_t b) -> uint16_t {
-        return static_cast<uint16_t>(((r & 0xF8) << 8) |
-                                     ((g & 0xFC) << 3) |
-                                     (b >> 3));
+    // Keep the compact Bruce 1.16 carousel and confine all labels to the frame.
+    // Clear the side gutters too, so pixels from a previously longer label cannot remain.
+    tft.fillRect(contentX, contentTop, contentW, contentHeight, bruceConfig.bgColor);
+    tft.fillRect(0, contentTop, contentX - 1, contentHeight, bruceConfig.bgColor);
+    tft.fillRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, contentTop,
+                 BORDER_OFFSET_FROM_SCREEN_EDGE, contentHeight, bruceConfig.bgColor);
+
+    auto fitToWidth = [&](String text, int maxWidth, int textSize) -> String {
+        tft.setTextSize(textSize);
+        if (tft.textWidth(text, menuFont) <= maxWidth) return text;
+
+        const String ellipsis = "...";
+        while (text.length() > 0 && tft.textWidth(text + ellipsis, menuFont) > maxWidth) {
+            int cut = static_cast<int>(text.length()) - 1;
+            while (cut > 0 &&
+                   (static_cast<uint8_t>(text.charAt(cut)) & 0xC0) == 0x80) {
+                cut--;
+            }
+            text.remove(cut);
+        }
+        return text + ellipsis;
     };
 
-    auto mixColor = [&](uint16_t a, uint16_t b, uint8_t amount) -> uint16_t {
-        uint8_t ar = ((a >> 11) & 0x1F) << 3;
-        uint8_t ag = ((a >> 5) & 0x3F) << 2;
-        uint8_t ab = (a & 0x1F) << 3;
-        uint8_t br = ((b >> 11) & 0x1F) << 3;
-        uint8_t bg = ((b >> 5) & 0x3F) << 2;
-        uint8_t bb = (b & 0x1F) << 3;
-        uint8_t r = ar + ((static_cast<int>(br) - ar) * amount) / 255;
-        uint8_t g = ag + ((static_cast<int>(bg) - ag) * amount) / 255;
-        uint8_t bl = ab + ((static_cast<int>(bb) - ab) * amount) / 255;
-        return rgb565(r, g, bl);
-    };
-
-    const uint16_t primary = bruceConfig.priColor;
-    const uint16_t secondary = bruceConfig.secColor;
-    const uint16_t background = bruceConfig.bgColor;
-
-    for (int row = 0; row < visibleItems; row++) {
-        const int idx = first + row;
-        if (idx >= menuSize) break;
-
-        const bool selected = idx == index;
-        const bool enabled = options[idx].enabled;
-        const int x = outerX + 3;
-        const int y = contentTop + row * pitch;
-        const int w = outerW - 6;
-        const int h = itemH;
-
-        uint16_t borderColor;
-        if (!enabled) borderColor = TFT_DARKGREY;
-        else if (selected) borderColor = primary;
-        else borderColor = getColorVariation(secondary);
-
-        tft.drawRoundRect(x, y, w, h, 5, borderColor);
-
-        const uint16_t gradientStart = selected
-            ? mixColor(background, background, 45)
-            : mixColor(background, secondary, 18);
-        const uint16_t gradientEnd = selected
-            ? mixColor(background, background, 45)
-            : mixColor(background, secondary, 55);
-
-        const int innerX = x + 2;
-        const int innerY = y + 2;
-        const int innerW = w - 4;
-        const int innerH = h - 4;
-        const int bands = 6;
-
-        for (int band = 0; band < bands; band++) {
-            const uint8_t amount = static_cast<uint8_t>((band * 255) / (bands - 1));
-            const uint16_t bandColor = mixColor(gradientStart, gradientEnd, amount);
-            const int bandY = innerY + (innerH * band) / bands;
-            const int bandH = (innerH * (band + 1)) / bands - (innerH * band) / bands;
-            tft.fillRect(innerX, bandY, innerW, bandH, bandColor);
+    auto wrapAtWordBoundary = [&](const String &label, int maxWidth,
+                                  int textSize) -> std::vector<String> {
+        std::vector<String> lines;
+        String text = label;
+        text.trim();
+        tft.setTextSize(textSize);
+        if (tft.textWidth(text, menuFont) <= maxWidth) {
+            lines.push_back(text);
+            return lines;
         }
 
-        // Keep exactly the same border size for selected and unselected items.
-        // Selection is indicated only by its different background gradient and font color.
+        int bestSplit = -1;
+        int bestDifference = maxWidth + 1;
+        for (int split = text.indexOf(' '); split >= 0; split = text.indexOf(' ', split + 1)) {
+            const String firstLine = text.substring(0, split);
+            const String secondLine = text.substring(split + 1);
+            if (firstLine.length() == 0 || secondLine.length() == 0) continue;
 
-        tft.setTextSize(FM);
-        String text = options[idx].label;
-        uint16_t textColor = !enabled ? TFT_DARKGREY : (selected ? primary : secondary);
-        tft.setTextColor(textColor);
-        tft.setTextDatum(ML_DATUM);
-        tft.drawString(text, x + 12, y + h / 2, SMOOTH_FONT);
-        tft.setTextDatum(TL_DATUM);
+            const int firstWidth = tft.textWidth(firstLine, menuFont);
+            const int secondWidth = tft.textWidth(secondLine, menuFont);
+            if (firstWidth > maxWidth || secondWidth > maxWidth) continue;
+
+            const int difference = abs(firstWidth - secondWidth);
+            if (difference < bestDifference) {
+                bestDifference = difference;
+                bestSplit = split;
+            }
+        }
+
+        if (bestSplit >= 0) {
+            lines.push_back(text.substring(0, bestSplit));
+            lines.push_back(text.substring(bestSplit + 1));
+        }
+        return lines;
+    };
+
+    auto chooseNeighborLabel = [&](const String &label, int &textSize) -> String {
+        textSize = FM;
+        tft.setTextSize(textSize);
+        if (tft.textWidth(label, menuFont) > maxLabelWidth) textSize = FP;
+        return fitToWidth(label, maxLabelWidth, textSize);
+    };
+
+    const int previousIndex = (index > 0) ? index - 1 : menuSize - 1;
+    const int nextIndex = (index + 1 < menuSize) ? index + 1 : 0;
+
+    int previousTextSize = FM;
+    int nextTextSize = FM;
+    const String previousLabel = chooseNeighborLabel(options[previousIndex].label, previousTextSize);
+    const String nextLabel = chooseNeighborLabel(options[nextIndex].label, nextTextSize);
+
+    const String selectedLabel = options[index].label;
+    int selectedTextSize = FG;
+    std::vector<String> selectedLines;
+    tft.setTextSize(selectedTextSize);
+    if (tft.textWidth(selectedLabel, menuFont) <= maxLabelWidth) {
+        selectedLines.push_back(selectedLabel);
+    } else {
+        selectedTextSize = FM;
+        selectedLines = wrapAtWordBoundary(selectedLabel, maxLabelWidth, selectedTextSize);
+        if (selectedLines.empty()) {
+            selectedTextSize = FP;
+            selectedLines = wrapAtWordBoundary(selectedLabel, maxLabelWidth, selectedTextSize);
+        }
+        if (selectedLines.empty()) {
+            selectedLines.push_back(fitToWidth(selectedLabel, maxLabelWidth, FP));
+            selectedTextSize = FP;
+        }
     }
 
-    // Thin scrollbar on the right shows the current position in the submenu.
+    tft.setTextSize(selectedTextSize);
+    const int selectedLineHeight = max(1, static_cast<int>(tft.fontHeight(menuFont)));
+    const int selectedBlockHeight =
+        static_cast<int>(selectedLines.size()) * selectedLineHeight +
+        (static_cast<int>(selectedLines.size()) - 1) * 2;
+    const int middle = contentTop + contentHeight / 2;
+    const int selectedTop = middle - selectedBlockHeight / 2;
+
+    tft.setTextSize(previousTextSize);
+    const int previousLineHeight = max(1, static_cast<int>(tft.fontHeight(menuFont)));
+    tft.setTextSize(nextTextSize);
+    const int nextLineHeight = max(1, static_cast<int>(tft.fontHeight(menuFont)));
+
+    int previousY;
+    int nextY;
+    if (selectedLines.size() > 1) {
+        previousY = contentTop + 2;
+        nextY = contentBottom - nextLineHeight - 2;
+    } else {
+        const int neighborOffset = contentHeight / 3;
+        previousY = middle - neighborOffset - previousLineHeight / 2 + 4;
+        nextY = middle + neighborOffset - nextLineHeight / 2;
+    }
+
+    tft.setTextSize(previousTextSize);
+    tft.setTextColor(options[previousIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY,
+                     bruceConfig.bgColor);
+    tft.drawCentreString(previousLabel, tftWidth / 2, previousY, menuFont);
+
+    const uint16_t selectedColor =
+        options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY;
+    tft.setTextSize(selectedTextSize);
+    tft.setTextColor(selectedColor, bruceConfig.bgColor);
+
+    int underlineWidth = 0;
+    for (size_t i = 0; i < selectedLines.size(); i++) {
+        tft.drawCentreString(selectedLines[i], tftWidth / 2,
+                             selectedTop + static_cast<int>(i) * (selectedLineHeight + 2), menuFont);
+        underlineWidth = max(underlineWidth, static_cast<int>(tft.textWidth(selectedLines[i], menuFont)));
+    }
+    if (underlineWidth > 0) {
+        tft.drawFastHLine((tftWidth - underlineWidth) / 2,
+                          selectedTop + selectedBlockHeight + 1,
+                          underlineWidth,
+                          selectedColor);
+    }
+
+    tft.setTextSize(nextTextSize);
+    tft.setTextColor(options[nextIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY,
+                     bruceConfig.bgColor);
+    tft.drawCentreString(nextLabel, tftWidth / 2, nextY, menuFont);
+
     tft.fillRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, 0,
-                 BORDER_OFFSET_FROM_SCREEN_EDGE, tftHeight, background);
+                 BORDER_OFFSET_FROM_SCREEN_EDGE, tftHeight, bruceConfig.bgColor);
     const int indicatorH = max(4, tftHeight / menuSize);
-    const int indicatorY = (index * (tftHeight - indicatorH)) / max(1, menuSize - 1);
-    tft.fillRoundRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorY,
-                      BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorH, 2, primary);
+    const int indicatorY =
+        (index * (tftHeight - indicatorH)) / max(1, menuSize - 1);
+    tft.fillRect(tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorY,
+                 BORDER_OFFSET_FROM_SCREEN_EDGE, indicatorH, bruceConfig.priColor);
 
 #if defined(HAS_TOUCH)
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    int escW = 5 * LW * FM + 4;
+    const int escW = 5 * LW * FM + 4;
     tft.drawString("[ x ]", tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW,
                    BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1);
     TouchFooter();
 #endif
-}
 
+    tft.setTextDatum(TL_DATUM);
+}
 void drawStatusBar() {
     uint8_t bat = getBattery();
     if (bat > 0) drawBatteryStatus(bat);
