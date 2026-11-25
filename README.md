@@ -1,4 +1,6 @@
-# aliense44 Bruce Firmware Fork
+![Bruce & Aliense44 — Xenomorph Edition](./media/pictures/Aliense44_banner.png)
+
+# Bruce & Aliense44 — Xenomorph Edition
 
 This is a personal fork of [Bruce](https://github.com/pr3y/Bruce), focused on RF experimentation, ProtoPirate improvements, and practical Sub-GHz workflow enhancements.
 
