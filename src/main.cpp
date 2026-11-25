@@ -1,5 +1,8 @@
 #include "core/main_menu.h"
 #include <globals.h>
+#if !defined(LITE_VERSION)
+#include "core/xenomorph_xbm.h"
+#endif
 
 #include "core/bus_HAL.h"
 #include "core/powerSave.h"
@@ -289,10 +292,17 @@ void boot_screen() {
  *********************************************************************/
 void boot_screen_anim() {
     boot_screen();
-    int i = millis();
+    const unsigned long i = millis();
     // checks for boot.jpg in SD and LittleFS for customization
     int boot_img = 0;
     bool drawn = false;
+#if !defined(LITE_VERSION)
+    bool xenoStarted = false;
+    int lastXenoFrame = -1;
+    const unsigned char *const xenoFrames[] = {
+        xenoFrameClosed, xenoFrameMidOut, xenoFrameOpen, xenoFrameMidIn
+    };
+#endif
     if (sdcardMounted) {
         if (SD.exists("/boot.jpg")) boot_img = 1;
         else if (SD.exists("/boot.gif")) boot_img = 3;
@@ -303,7 +313,7 @@ void boot_screen_anim() {
 
     tft.drawPixel(0, 0, 0);       // Forces back communication with TFT, to avoid ghosting
                                   // Start image loop
-    while (millis() < i + 7000) { // boot image lasts for 5 secs
+    while (millis() - i < 7000) { // boot image lasts for 7 seconds
         if ((millis() - i > 2000) && !drawn) {
             tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
             if (boot_img > 0 && !drawn) {
@@ -336,31 +346,37 @@ void boot_screen_anim() {
             drawn = true;
         }
 #if !defined(LITE_VERSION)
-        if (!boot_img && (millis() - i > 2200) && (millis() - i) < 2700)
-            tft.drawRect(2 * tftWidth / 3, tftHeight / 2, 2, 2, bruceConfig.priColor);
-        if (!boot_img && (millis() - i > 2700) && (millis() - i) < 2900)
-            tft.fillRect(0, 45, tftWidth, tftHeight - 45, bruceConfig.bgColor);
-        if (!boot_img && (millis() - i > 2900) && (millis() - i) < 3400)
-            tft.drawXBitmap(
-                2 * tftWidth / 3 - 30,
-                5 + tftHeight / 2,
-                bruce_small_bits,
-                bruce_small_width,
-                bruce_small_height,
-                bruceConfig.bgColor,
-                bruceConfig.priColor
-            );
-        if (!boot_img && (millis() - i > 3400) && (millis() - i) < 3600) tft.fillScreen(bruceConfig.bgColor);
-        if (!boot_img && (millis() - i > 3600))
-            tft.drawXBitmap(
-                (tftWidth - 238) / 2,
-                (tftHeight - 133) / 2,
-                bits,
-                bits_width,
-                bits_height,
-                bruceConfig.bgColor,
-                bruceConfig.priColor
-            );
+        const unsigned long elapsed = millis() - i;
+        if (!boot_img && elapsed >= 2800) {
+            if (!xenoStarted) {
+                tft.fillScreen(bruceConfig.bgColor);
+                xenoStarted = true;
+            }
+
+            int jawFrame;
+            if (elapsed < 3100) jawFrame = 0;       // jaw tucked in
+            else if (elapsed < 3350) jawFrame = 1;  // first extension
+            else if (elapsed < 3700) jawFrame = 2;  // fully extended
+            else if (elapsed < 3950) jawFrame = 3;  // retracting
+            else if (elapsed < 4350) jawFrame = 0;  // retracted
+            else if (elapsed < 4600) jawFrame = 1;  // second extension
+            else jawFrame = 2;                      // hold extended
+
+            if (jawFrame != lastXenoFrame) {
+                const int x = (tftWidth - xenoFrameClosed_width) / 2;
+                const int y = (tftHeight - xenoFrameClosed_height) / 2;
+                tft.drawXBitmap(
+                    x,
+                    y,
+                    xenoFrames[jawFrame],
+                    xenoFrameClosed_width,
+                    xenoFrameClosed_height,
+                    bruceConfig.priColor,
+                    bruceConfig.bgColor
+                );
+                lastXenoFrame = jawFrame;
+            }
+        }
 #endif
         if (check(AnyKeyPress)) // If any key or M5 key is pressed, it'll jump the boot screen
         {

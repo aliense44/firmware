@@ -27,6 +27,13 @@ a8fa5f7a - 23.11.2026
 
 This makes it easy to identify the firmware build currently installed on the device.
 
+## Submenu layout
+
+Submenus use a compact, unframed carousel inspired by Bruce 1.16 instead of the boxed vertical cards. The selected option is centered, with the previous and next options shown above and below it. Navigation wraps around at the ends of the list.
+
+The selected option uses the primary color and an underline. A slim indicator on the right shows the current position in the submenu.
+
+Long labels stay within the screen width. The selected label is reduced in size and wrapped at a word boundary across two lines where possible; if it still cannot fit, it is shortened with an ellipsis. Neighboring labels use a smaller font and are shortened with an ellipsis when needed. The submenu title and status bar remain visible.
 ## NRF24 tools
 
 This fork improves the NRF24 spectrum, active-channel reporting, and jamming workflow.
@@ -246,6 +253,13 @@ a8fa5f7a - 23.11.2026
 
 Dzięki temu łatwo rozpoznać, która wersja firmware jest aktualnie zainstalowana na urządzeniu.
 
+## Układ podmenu
+
+Podmenu korzysta teraz z kompaktowej karuzeli bez kart i ramek, inspirowanej układem Bruce 1.16. Wybrana pozycja jest wyświetlana pośrodku, a poprzednia i następna pojawiają się nad nią i pod nią. Nawigacja zawija się na końcach listy.
+
+Wybrana pozycja jest wyróżniona kolorem głównym i podkreśleniem. Wąski wskaźnik po prawej pokazuje położenie w podmenu.
+
+Długie nazwy mieszczą się w szerokości ekranu. Nazwa wybranej pozycji jest zmniejszana i, jeśli to możliwe, zawijana na granicy słów do dwóch wierszy; jeśli nadal się nie mieści, zostaje skrócona wielokropkiem. Sąsiednie pozycje używają mniejszej czcionki i w razie potrzeby również są skracane wielokropkiem. Tytuł podmenu i pasek statusu pozostają widoczne.
 ## Narzędzia NRF24
 
 Ten fork rozwija workflow analizy widma, raportowania aktywnych kanałów oraz jammingu NRF24.
